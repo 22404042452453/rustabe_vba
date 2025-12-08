@@ -61,32 +61,19 @@ For i = 0 To tbl.Size - 1
             wsData.Cells(1, timeCol).Value = genName & " (Time)"
             wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
             
-            ' Запись массива данных построчно (Plot - это массив [npoints x 2])
-            ' Одновременно вычисляем MAX и MIN для каждого генератора
-            Dim j
-            Dim maxDelta, minDelta, deltaVal
-            Dim firstDelta: firstDelta = True
+            ' Запись массива данных целиком через Resize (Plot - это массив [npoints x 2])
+            wsData.Cells(2, timeCol).Resize(npoints, 2).Value = Plot
             
-            For j = 0 To npoints - 1
-                wsData.Cells(j + 2, timeCol).Value = CDbl(Plot(j, 0)) ' Time
-                deltaVal = CDbl(Plot(j, 1))
-                wsData.Cells(j + 2, deltaCol).Value = deltaVal ' Delta
-                
-                ' Вычисляем MAX и MIN прямо здесь (надежнее чем формулы Excel)
-                If firstDelta Then
-                    maxDelta = deltaVal
-                    minDelta = deltaVal
-                    firstDelta = False
-                Else
-                    If deltaVal > maxDelta Then maxDelta = deltaVal
-                    If deltaVal < minDelta Then minDelta = deltaVal
-                End If
-            Next
+            ' --- Шаг 2: Создание формул MAX и MIN в wsResult, ссылающихся на wsData ---
+            ' Используем формат A1 с указанием листа для межлистовых ссылок
+            Dim deltaStartAddr: deltaStartAddr = wsData.Cells(2, deltaCol).Address(False, False, 1, True)
+            Dim deltaEndAddr: deltaEndAddr = wsData.Cells(npoints + 1, deltaCol).Address(False, False, 1, True)
+            Dim deltaRange: deltaRange = deltaStartAddr & ":" & deltaEndAddr
             
-            ' --- Шаг 2: Записываем вычисленные MAX и MIN в wsResult ---
+            ' Записываем формулы в wsResult
             wsResult.Cells(resultRow, 1).Value = genName
-            wsResult.Cells(resultRow, 2).Value = maxDelta
-            wsResult.Cells(resultRow, 3).Value = minDelta
+            wsResult.Cells(resultRow, 2).Formula = "=MAX(" & deltaRange & ")"
+            wsResult.Cells(resultRow, 3).Formula = "=MIN(" & deltaRange & ")"
             
             resultRow = resultRow + 1
             genCount = genCount + 1
@@ -96,6 +83,9 @@ For i = 0 To tbl.Size - 1
         End If
     End If
 Next
+
+' --- Вычисление всех формул один раз после цикла ---
+xl.Calculate
 
 ' --- Форматирование ---
 wsData.Columns.AutoFit
