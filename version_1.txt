@@ -69,11 +69,21 @@ For i = 0 To tbl.Size - 1
             ' Plot(j, 0) -> deltaCol, Plot(j, 1) -> timeCol
             wsData.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
             
-            ' --- Шаг 2: Создание формул MAX и MIN в wsResult, ссылающихся на wsData ---
-            ' Используем формат A1 с указанием листа для межлистовых ссылок
+            ' --- Шаг 2: Создание вспомогательной колонки для проверки > 180 (работаем с данными из Excel) ---
+            Dim checkCol: checkCol = timeCol + 1 ' Вспомогательная колонка для проверки Delta > 180
+            wsData.Cells(1, checkCol).Value = genName & " (>180)"
+            ' Заполняем вспомогательную колонку формулой проверки (работаем с данными из Excel)
             Dim deltaStartAddr: deltaStartAddr = wsData.Cells(2, deltaCol).Address(False, False, 1, True)
             Dim deltaEndAddr: deltaEndAddr = wsData.Cells(npoints + 1, deltaCol).Address(False, False, 1, True)
             Dim deltaRange: deltaRange = deltaStartAddr & ":" & deltaEndAddr
+            Dim checkStartAddr: checkStartAddr = wsData.Cells(2, checkCol).Address(False, False, 1, True)
+            Dim checkEndAddr: checkEndAddr = wsData.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
+            Dim checkRange: checkRange = checkStartAddr & ":" & checkEndAddr
+            ' Заполняем вспомогательную колонку формулой: если Delta > 180, то номер строки, иначе большое число
+            ' Используем относительные ссылки для каждой строки (R1C1 формат)
+            wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & deltaCol & ">180,ROW(),999999)"
+            
+            ' --- Шаг 3: Создание формул MAX и MIN в wsResult, ссылающихся на wsData ---
             Dim timeStartAddr: timeStartAddr = wsData.Cells(2, timeCol).Address(False, False, 1, True)
             Dim timeEndAddr: timeEndAddr = wsData.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
             Dim timeRange: timeRange = timeStartAddr & ":" & timeEndAddr
@@ -90,12 +100,17 @@ For i = 0 To tbl.Size - 1
             wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>180,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
             
             ' Время нарушения устойчивости (время первого значения > 180)
-            ' Используем формулу массива для поиска первого значения > 180
-            ' Формула: IF(MAX>180, INDEX времени по позиции MATCH первого TRUE в массиве проверки >180)
-            wsResult.Cells(resultRow, 6).Formula = "=IF(MAX(" & deltaRange & ")>180,INDEX(" & timeRange & ",MATCH(TRUE,INDEX(" & deltaRange & ">180,0),0)),"""")"
+            ' Используем MIN вспомогательной колонки для нахождения первой строки с > 180
+            Dim checkBaseRow: checkBaseRow = wsData.Cells(2, checkCol).Address(False, False, 1, False)
+            Dim checkBaseRowAbs: checkBaseRowAbs = wsData.Cells(2, checkCol).Address(False, False, 1, True)
+            ' Если MIN < 999999, значит есть нарушение, находим соответствующее время
+            wsResult.Cells(resultRow, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MIN(" & checkRange & ")-ROW(" & checkBaseRowAbs & ")+1),"""")"
+            
+            ' Увеличиваем счетчик колонок с учетом вспомогательной колонки
+            dataCol = dataCol + 3
             
             resultRow = resultRow + 1
-            genCount = genCount + 1
+        genCount = genCount + 1
             
             ' Увеличиваем счетчик колонок для следующего генератора (ПОСЛЕ использования deltaCol!)
             dataCol = dataCol + 2
