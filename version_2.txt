@@ -22,8 +22,8 @@ Dim scenarioCount: scenarioCount = 0
 
 ' --- Предварительный поиск сценариев ---
 Dim foundScnFiles: foundScnFiles = 0
-' Индекс снимка в цепочке (0 - первый, 1 - второй и т.д.). Для использования последнего .sna ставим 1.
-Const SnapshotIndex = 1
+' Максимальный индекс снимка в цепочке .sna (будем искать с него вниз до 0)
+Const MaxSnapshotIndex = 5
 If fso.FolderExists(ScenarioFolderPath) Then
     For Each f In fso.GetFolder(ScenarioFolderPath).Files
         If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
@@ -95,12 +95,21 @@ Else
                         For i = 0 To tbl.Size - 1
                             genName = colName.ZS(i)
 
-                            On Error Resume Next
-                            Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, SnapshotIndex)
-                            errNum = Err.Number
-                            On Error GoTo 0
+                            ' Пытаемся взять последний доступный снимок: пробуем от MaxSnapshotIndex до 0
+                            Set Plot = Nothing
+                            Dim snapIdx, tmpPlot
+                            For snapIdx = MaxSnapshotIndex To 0 Step -1
+                                On Error Resume Next
+                                tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
+                                errNum = Err.Number
+                                On Error GoTo 0
+                                If errNum = 0 And IsArray(tmpPlot) Then
+                                    Plot = tmpPlot
+                                    Exit For
+                                End If
+                            Next
 
-                            If errNum = 0 And IsArray(Plot) Then
+                            If IsArray(Plot) Then
                                 npoints = UBound(Plot, 1) + 1
                                 If npoints > 0 Then
                                     deltaCol = dataCol
