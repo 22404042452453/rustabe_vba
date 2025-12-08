@@ -61,16 +61,12 @@ Else
         On Error GoTo 0
         If errNum <> 0 Or tbl Is Nothing Then
             MsgBox "Таблица Generator недоступна в сценарии: " & f.Name, vbExclamation, "Пропуск"
-            GoTo NextScenario
-        End If
-
-        Set colName = tbl.Cols("Name")
-        If colName Is Nothing Then
-            MsgBox "Колонка Name отсутствует в Generator: " & f.Name, vbExclamation, "Пропуск"
-            GoTo NextScenario
-        End If
-
-        Dim dataCol: dataCol = 1 ' колонки на wsData: Delta, Time, Check>180
+        Else
+            Set colName = tbl.Cols("Name")
+            If colName Is Nothing Then
+                MsgBox "Колонка Name отсутствует в Generator: " & f.Name, vbExclamation, "Пропуск"
+            Else
+                Dim dataCol: dataCol = 1 ' колонки на wsData: Delta, Time, Check>180
 
         For i = 0 To tbl.Size - 1
             genName = colName.ZS(i)
