@@ -3,11 +3,9 @@
 ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
-' Максимальные числа для Repair/Outage (как в вариантах)
+' Максимальные числа для Repair (как в вариантах)
 MaxRepair = 6
 MaxRepair_count = 1
-MaxOutage = 2
-MaxOutage_count = 1
 
 ' --- Rastr таблицы ---
 Set spBranch = Rastr.Tables("vetv")
@@ -110,27 +108,6 @@ Class Combinator
     end function
 End Class
 
-' --- Уникализатор отключений (как в вариантах) ---
-Set spStoredOutages = CreateObject("Scripting.Dictionary")
-Class Uniquizer
-    public function ReadOutage
-        spBranch.SetSel("sta")
-        ndx = spBranch.FindNextSel(-1)
-        OutagePrint = ""
-        while ndx >= 0
-            OutagePrint = OutagePrint & CStr(ndx) & ";"
-            ndx = spBranch.FindNextSel(ndx)
-        wend
-        If spStoredOutages.Exists(OutagePrint) Then
-            ReadOutage = 0
-        Else
-            spStoredOutages.Add OutagePrint,1
-            ReadOutage = 1
-        End If
-    end function
-End Class
-Set spUniquizer = new Uniquizer
-
 ' --- Вспомогательные процедуры из файла вариантов ---
 Sub TopologyStore
     On Error Resume Next
@@ -155,11 +132,6 @@ Sub PrepareTemplate
     if spBranch.Cols.Find("Repair") < 0 Then
         spBranch.Cols.Add "Repair", PR_BOOL
         spBranch.Cols("Repair").Prop(FL_ZAG) = "Ремонт"
-        TemplateFieldsAdded = 1
-    End If
-    if spBranch.Cols.Find("Outage") < 0 Then
-        spBranch.Cols.Add "Outage", PR_BOOL
-        spBranch.Cols("Outage").Prop(FL_ZAG) = "Откл"
         TemplateFieldsAdded = 1
     End If
     if spBranch.Cols.Find("Report") < 0 Then
@@ -192,7 +164,7 @@ End function
 
 ' --- Подготовка исходных списков ветвей/узлов ---
 Call TopologyStore
-Dim BranchIndexes(), NodeIndexes(), RepairIndexes(), OutageIndexes()
+Dim BranchIndexes(), NodeIndexes(), RepairIndexes()
 
 spBranch.SetSel("Report")
 ReDim BranchIndexes(spBranch.Count-1)
@@ -224,28 +196,16 @@ While ndx >= 0
     ndx = spBranch.FindNextSel(ndx)
 Wend
 
-spBranch.SetSel("Outage")
-ReDim OutageIndexes(spBranch.Count)
-BranchCount = 0
-ndx = spBranch.FindNextSel(-1)
-While ndx >= 0
-    OutageIndexes(BranchCount) = ndx
-    BranchCount  = BranchCount + 1
-    ndx = spBranch.FindNextSel(ndx)
-Wend
-
 If MaxRepair > UBound(RepairIndexes) Then MaxRepair = UBound(RepairIndexes)
-If MaxOutage > UBound(OutageIndexes) Then MaxOutage = UBound(OutageIndexes)
 
-Dim RepairComb, OutageComb
+Dim RepairComb
 Set RepairComb = new Combinator
-Set OutageComb = new Combinator
-Dim RepComb(), OutComb()
+Dim RepComb()
 
 ' --- Функция расчёта динамики и записи результатов по генераторам ---
 Sub RunDynamicsAndWrite(genSheet, description)
     ' genSheet: лист wsResult, resultRow — глобальный указатель строки
-    ' description: строка описания УР (Repair/Outage)
+' description: строка описания УР (Repair)
     wsResult.Cells(resultRow, 1).Value = description
     wsResult.Cells(resultRow, 1).Font.Bold = True
     resultRow = resultRow + 1
@@ -333,51 +293,48 @@ Sub RunDynamicsAndWrite(genSheet, description)
     End If
 End Sub
 
-' --- Основной цикл: сценарии -> комбинации Repair/Outage -> динамика по генераторам ---
+' --- Основной цикл: сценарии -> комбинации Repair -> динамика по генераторам ---
 Dim scenarioCount: scenarioCount = 0
 If TemplateFieldsAdded = 1 Then
     MsgBox "Поля добавлены. Сохраните модель и запустите скрипт повторно для расчётов.", vbInformation, "Подготовка завершена"
-    On Error Resume Next
-    xl.DisplayAlerts = True
-    On Error GoTo 0
-    End
-End If
-If Not CreateObject("Scripting.FileSystemObject").FolderExists(ScenarioFolderPath) Then
-    MsgBox "Папка сценариев не найдена: " & ScenarioFolderPath, vbCritical, "Ошибка"
 Else
-    For Each f In CreateObject("Scripting.FileSystemObject").GetFolder(ScenarioFolderPath).Files
-        If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
-            Rastr.Load 1, f.Path, ScenarioTemplatePath
-            Set spFWDynamic = Rastr.FWDynamic
-            If Not spFWDynamic Is Nothing Then
-                If spFWDynamic.Run() = 0 Then
-                    scenarioCount = scenarioCount + 1
-                    wsData.Cells.Clear
+    If Not CreateObject("Scripting.FileSystemObject").FolderExists(ScenarioFolderPath) Then
+        MsgBox "Папка сценариев не найдена: " & ScenarioFolderPath, vbCritical, "Ошибка"
+    Else
+        For Each f In CreateObject("Scripting.FileSystemObject").GetFolder(ScenarioFolderPath).Files
+            If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
+                Rastr.Load 1, f.Path, ScenarioTemplatePath
+                Set spFWDynamic = Rastr.FWDynamic
+                If Not spFWDynamic Is Nothing Then
+                    If spFWDynamic.Run() = 0 Then
+                        scenarioCount = scenarioCount + 1
+                        wsData.Cells.Clear
 
-                    ' Заголовок сценария
-                    wsResult.Cells(resultRow, 1).Value = "Сценарий: " & f.Name
-                    wsResult.Cells(resultRow, 1).Font.Bold = True
-                    resultRow = resultRow + 1
+                        ' Заголовок сценария
+                        wsResult.Cells(resultRow, 1).Value = "Сценарий: " & f.Name
+                        wsResult.Cells(resultRow, 1).Font.Bold = True
+                        resultRow = resultRow + 1
 
-                    ' Перебор только Repair (аварийные отключения не используем)
-                    For RepOff = MaxRepair_count To MaxRepair
-                        RepairComb.Init RepairIndexes, RepOff, UBound(RepairIndexes)
-                        If RepairComb.FirstCombination(RepComb) Then
-                            Do
-                                ' Применяем выбранные Repair
-                                RepTitle = PlaceOffs(RepComb, RepOff)
-                                ' Запускаем расчёт динамики и запись результатов
-                                RunDynamicsAndWrite wsResult, "УР: " & RepTitle
-                                ' Восстанавливаем топологию после комбинации
-                                TopologyRestore
-                            Loop While RepairComb.NextCombination(RepComb)
-                        End If
-                    Next
+                        ' Перебор только Repair (аварийные отключения не используем)
+                        For RepOff = MaxRepair_count To MaxRepair
+                            RepairComb.Init RepairIndexes, RepOff, UBound(RepairIndexes)
+                            If RepairComb.FirstCombination(RepComb) Then
+                                Do
+                                    ' Применяем выбранные Repair
+                                    RepTitle = PlaceOffs(RepComb, RepOff)
+                                    ' Запускаем расчёт динамики и запись результатов
+                                    RunDynamicsAndWrite wsResult, "УР: " & RepTitle
+                                    ' Восстанавливаем топологию после комбинации
+                                    TopologyRestore
+                                Loop While RepairComb.NextCombination(RepComb)
+                            End If
+                        Next
 
+                    End If
                 End If
             End If
-        End If
-    Next
+        Next
+    End If
 End If
 
 wsResult.Columns.AutoFit
