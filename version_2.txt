@@ -22,6 +22,8 @@ Dim scenarioCount: scenarioCount = 0
 
 ' --- Предварительный поиск сценариев ---
 Dim foundScnFiles: foundScnFiles = 0
+' Индекс снимка в цепочке (0 - первый, 1 - второй и т.д.). Для использования последнего .sna ставим 1.
+Const SnapshotIndex = 1
 If fso.FolderExists(ScenarioFolderPath) Then
     For Each f In fso.GetFolder(ScenarioFolderPath).Files
         If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
@@ -58,29 +60,23 @@ Else
             ' Очищаем лист данных перед новым сценарием
             wsData.Cells.Clear
 
-            ' Создаём отдельный лист для результатов сценария
-            Dim wsResCurrent, sheetNameBase, sheetNameSafe, sheetExists, sh
-            sheetNameBase = "Рез_" & f.Name
-            sheetNameSafe = Left(sheetNameBase, 25)
-            sheetExists = False
-            For Each sh In wb.Worksheets
-                If sh.Name = sheetNameSafe Then sheetExists = True
-            Next
-            If sheetExists Then
-                sheetNameSafe = sheetNameSafe & "_" & scenarioCount
-            End If
-            Set wsResCurrent = wb.Worksheets.Add
-            wsResCurrent.Name = sheetNameSafe
+            ' Строка с названием сценария на общем листе
+            wsResult.Cells(resultRow, 1).Value = "Сценарий: " & f.Name
+            wsResult.Cells(resultRow, 1).Font.Bold = True
+            resultRow = resultRow + 1
 
-            ' Заголовок блока результатов на листе сценария
-            wsResCurrent.Cells(1, 1).Value = "Генератор"
-            wsResCurrent.Cells(1, 2).Value = "Max Delta"
-            wsResCurrent.Cells(1, 3).Value = "Min Delta"
-            wsResCurrent.Cells(1, 4).Value = "Время Max Delta"
-            wsResCurrent.Cells(1, 5).Value = "Нарушение устойчивости"
-            wsResCurrent.Cells(1, 6).Value = "Время нарушения устойчивости"
-            wsResCurrent.Range("A1:F1").Font.Bold = True
-            Dim resultRowScenario: resultRowScenario = 2
+            ' Заголовок блока результатов на общем листе
+            wsResult.Cells(resultRow, 1).Value = "Генератор"
+            wsResult.Cells(resultRow, 2).Value = "Max Delta"
+            wsResult.Cells(resultRow, 3).Value = "Min Delta"
+            wsResult.Cells(resultRow, 4).Value = "Время Max Delta"
+            wsResult.Cells(resultRow, 5).Value = "Нарушение устойчивости"
+            wsResult.Cells(resultRow, 6).Value = "Время нарушения устойчивости"
+            wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 6)).Font.Bold = True
+            resultRow = resultRow + 1
+
+            ' Запоминаем начало блока строк результатов для текущего сценария
+            Dim scenarioBlockStart: scenarioBlockStart = resultRow
 
                 ' Таблица генераторов
                 On Error Resume Next
@@ -100,7 +96,7 @@ Else
                             genName = colName.ZS(i)
 
                             On Error Resume Next
-                            Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, 0)
+                            Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, SnapshotIndex)
                             errNum = Err.Number
                             On Error GoTo 0
 
@@ -134,24 +130,25 @@ Else
                                     checkRange = checkStartAddr & ":" & checkEndAddr
 
                                     ' Запись формул в результирующий лист
-                                    wsResCurrent.Cells(resultRowScenario, 1).Value = genName
-                                    wsResCurrent.Cells(resultRowScenario, 2).Formula = "=MAX(" & deltaRange & ")"
-                                    wsResCurrent.Cells(resultRowScenario, 3).Formula = "=MIN(" & deltaRange & ")"
-                                    wsResCurrent.Cells(resultRowScenario, 4).Formula = "=INDEX(" & timeRange & ",MATCH(MAX(" & deltaRange & ")," & deltaRange & ",0))"
-                                    wsResCurrent.Cells(resultRowScenario, 5).Formula = "=IF(MAX(" & deltaRange & ")>180,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
-                                    wsResCurrent.Cells(resultRowScenario, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+                                    wsResult.Cells(resultRow, 1).Value = genName
+                                    wsResult.Cells(resultRow, 2).Formula = "=MAX(" & deltaRange & ")"
+                                    wsResult.Cells(resultRow, 3).Formula = "=MIN(" & deltaRange & ")"
+                                    wsResult.Cells(resultRow, 4).Formula = "=INDEX(" & timeRange & ",MATCH(MAX(" & deltaRange & ")," & deltaRange & ",0))"
+                                    wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>180,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
+                                    wsResult.Cells(resultRow, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
 
-                                    resultRowScenario = resultRowScenario + 1
+                                    resultRow = resultRow + 1
                                     dataCol = dataCol + 3
                                 End If
                             End If
                         Next
-                        ' Зафиксировать значения на листе сценария
-                        If resultRowScenario > 2 Then
+
+                        ' Зафиксировать результаты текущего сценария (убрать ссылки на wsData)
+                        Dim scenarioBlockEnd: scenarioBlockEnd = resultRow - 1
+                        If scenarioBlockEnd >= scenarioBlockStart Then
                             xl.Calculate
-                            wsResCurrent.Range(wsResCurrent.Cells(2, 1), wsResCurrent.Cells(resultRowScenario - 1, 6)).Value = _
-                                wsResCurrent.Range(wsResCurrent.Cells(2, 1), wsResCurrent.Cells(resultRowScenario - 1, 6)).Value
-                            wsResCurrent.Columns.AutoFit
+                            wsResult.Range(wsResult.Cells(scenarioBlockStart, 1), wsResult.Cells(scenarioBlockEnd, 6)).Value = _
+                                wsResult.Range(wsResult.Cells(scenarioBlockStart, 1), wsResult.Cells(scenarioBlockEnd, 6)).Value
                         End If
                     End If
                 End If
