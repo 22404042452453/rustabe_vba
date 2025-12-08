@@ -165,6 +165,7 @@ End function
 ' --- Подготовка исходных списков ветвей/узлов ---
 Call TopologyStore
 Dim BranchIndexes(), NodeIndexes(), RepairIndexes()
+Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
 
 spBranch.SetSel("Report")
 ReDim BranchIndexes(spBranch.Count-1)
@@ -175,6 +176,11 @@ While ndx >= 0
     BranchCount = BranchCount + 1
     ndx = spBranch.FindNextSel(ndx)
 Wend
+If BranchCount > 0 Then
+    ReDim Preserve BranchIndexes(BranchCount-1)
+Else
+    ReDim BranchIndexes(0)
+End If
 
 spNode.SetSel("sel")
 ReDim NodeIndexes(spNode.Count-1)
@@ -185,6 +191,11 @@ While ndx >= 0
     NodeCount = NodeCount + 1
     ndx = spNode.FindNextSel(ndx)
 Wend
+If NodeCount > 0 Then
+    ReDim Preserve NodeIndexes(NodeCount-1)
+Else
+    ReDim NodeIndexes(0)
+End If
 
 spBranch.SetSel("Repair")
 ReDim RepairIndexes(spBranch.Count)
@@ -195,7 +206,11 @@ While ndx >= 0
     BranchCount  = BranchCount + 1
     ndx = spBranch.FindNextSel(ndx)
 Wend
-
+If BranchCount > 0 Then
+    ReDim Preserve RepairIndexes(BranchCount-1)
+Else
+    ReDim RepairIndexes(0)
+End If
 If MaxRepair > UBound(RepairIndexes) Then MaxRepair = UBound(RepairIndexes)
 
 Dim RepairComb
@@ -295,15 +310,37 @@ End Sub
 
 ' --- Основной цикл: сценарии -> комбинации Repair -> динамика по генераторам ---
 Dim scenarioCount: scenarioCount = 0
+Dim scenarioList()
+ReDim scenarioList(-1)
+
+Sub CollectScenarioFiles(folderPath)
+    For Each f In fso.GetFolder(folderPath).Files
+        If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
+            ReDim Preserve scenarioList(UBound(scenarioList) + 1)
+            scenarioList(UBound(scenarioList)) = f.Path
+        End If
+    Next
+    For Each subf In fso.GetFolder(folderPath).SubFolders
+        CollectScenarioFiles subf.Path
+    Next
+End Sub
+
+If fso.FolderExists(ScenarioFolderPath) Then
+    CollectScenarioFiles ScenarioFolderPath
+End If
+
 If TemplateFieldsAdded = 1 Then
     MsgBox "Поля добавлены. Сохраните модель и запустите скрипт повторно для расчётов.", vbInformation, "Подготовка завершена"
 Else
-    If Not CreateObject("Scripting.FileSystemObject").FolderExists(ScenarioFolderPath) Then
+    If Not fso.FolderExists(ScenarioFolderPath) Then
         MsgBox "Папка сценариев не найдена: " & ScenarioFolderPath, vbCritical, "Ошибка"
     Else
-        For Each f In CreateObject("Scripting.FileSystemObject").GetFolder(ScenarioFolderPath).Files
-            If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
-                Rastr.Load 1, f.Path, ScenarioTemplatePath
+        If UBound(scenarioList) < 0 Then
+            MsgBox "Не найдено ни одного .scn в папке (учитывая подкаталоги): " & ScenarioFolderPath, vbExclamation, "Нет сценариев"
+        Else
+            For iScn = 0 To UBound(scenarioList)
+                scnPath = scenarioList(iScn)
+                Rastr.Load 1, scnPath, ScenarioTemplatePath
                 Set spFWDynamic = Rastr.FWDynamic
                 If Not spFWDynamic Is Nothing Then
                     If spFWDynamic.Run() = 0 Then
@@ -311,7 +348,7 @@ Else
                         wsData.Cells.Clear
 
                         ' Заголовок сценария
-                        wsResult.Cells(resultRow, 1).Value = "Сценарий: " & f.Name
+                        wsResult.Cells(resultRow, 1).Value = "Сценарий: " & scnPath
                         wsResult.Cells(resultRow, 1).Font.Bold = True
                         resultRow = resultRow + 1
 
