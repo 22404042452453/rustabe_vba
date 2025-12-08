@@ -376,7 +376,11 @@ Else
 
                                 hasNext = RepairComb.NextCombination(RepComb)
                                 If hasNext = 0 Then
-                                    Exit Do ' последний набор уже сформирован
+                                    ' Отработать последнюю комбинацию, которую NextCombination уже сформировал
+                                    RepTitle = PlaceOffs(RepComb, RepOff)
+                                    RunDynAndWriteSafe "УР: Ремонт ВЛ - " & RepTitle
+                                    TopologyRestore
+                                    Exit Do
                                 End If
                             Loop
                         End If
