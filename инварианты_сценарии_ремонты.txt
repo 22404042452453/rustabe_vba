@@ -1,0 +1,383 @@
+' --- Параметры сценариев и вариантов ---
+' Пути к шаблону и папке со сценариями (.scn)
+ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
+ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
+
+' Максимальные числа для Repair/Outage (как в вариантах)
+MaxRepair = 6
+MaxRepair_count = 1
+MaxOutage = 2
+MaxOutage_count = 1
+
+' --- Rastr таблицы ---
+Set spBranch = Rastr.Tables("vetv")
+Set spNode   = Rastr.Tables("node")
+
+' --- Инициализация Excel ---
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+xl.DisplayAlerts = False
+Set wb = xl.Workbooks.Add
+Set wsData = wb.Worksheets(1)
+wsData.Name = "Данные"
+Set wsResult = wb.Worksheets.Add
+wsResult.Name = "Результаты"
+
+' Заголовок результирующего блока будет добавляться на лету
+Dim resultRow: resultRow = 1
+
+' --- Подготовка шаблона (из файла вариантов) ---
+PrepareTemplate
+
+' --- Вспомогательные объекты/колонки ---
+Set spBranchIp  = spBranch.Cols("ip")
+Set spBranchIq  = spBranch.Cols("iq")
+Set spBranchNm  = spBranch.Cols("name")
+Set spBranchSta = spBranch.Cols("sta")
+Set spBranchGrp = spBranch.Cols("groupid")
+Set spBranchSrt = spBranch.Cols("_SortKey")
+Set spBranchI   = spBranch.Cols("ie")
+Set spBranchIb  = spBranch.Cols("ib")
+Set spBranchIl  = spBranch.Cols("zag_it")
+Set spBranchIpr = spBranch.Cols("i_dop_r")
+Set spBranchSmx = spBranch.Cols("slmax")
+Set spBranchSel = spBranch.Cols("Report")
+Set spNodeSta   = spNode.Cols("sta")
+Set spNodeNy    = spNode.Cols("ny")
+Set spNodeName  = spNode.Cols("name")
+Set spNodeUhom  = spNode.Cols("uhom")
+Set spNodeUmin  = spNode.Cols("umin")
+Set spNodeUmax  = spNode.Cols("umax")
+Set spNodeV     = spNode.Cols("vras")
+
+' --- Классы и комбинирование (из файла вариантов) ---
+Class Combinator
+    Dim Counter()
+    Dim V()
+    Private m
+    Private n
+    Private Sub Swap(byref V,i1,i2)
+        temp  = V(i1)
+        V(i1) = V(i2)
+        V(i2) = temp
+    End Sub
+    public function Init(Vsource,Em,En)
+        Init = True
+        m = Em
+        n = En
+        Redim V(UBound(Vsource))
+        for i = 0 to UBound(Vsource)
+            V(i) = Vsource(i)
+        next
+        if m > n Then MsgBox "M>N !" : Init = False
+        If Init Then
+            Redim Counter(n-1)
+            for i = 0 to Ubound(Counter)
+                Counter(i) = i
+            next
+        End If
+    end function
+    public function FirstCombination(byref Vout)
+        ReDim Vout(m-1)
+        for i = 0 to m-1
+            Vout(i) = V(Counter(i))
+        next
+        FirstCombination = not ((m = n) or (m = 0))
+    end function
+    public function NextCombination(byref Vout)
+        if Counter(m-1) < n - 1 Then
+            Counter(m-1) = Counter(m-1) + 1
+        Else
+            for i = m-2 to 0 step -1
+                if Counter(i) < n - m + 1 Then
+                    Counter(i) = Counter(i) + 1
+                    for j = i + 1 to m - 1
+                        Counter(j) = Counter(j-1) + 1
+                    next
+                End If
+            next
+        End if
+        Redim Vout(m-1)
+        for i = 0 to m-1
+            Vout(i) = V(Counter(i))
+        next
+        if Counter(0) = n - m Then
+            NextCombination = 0
+        Else
+            NextCombination = 1
+        End If
+    end function
+End Class
+
+' --- Уникализатор отключений (как в вариантах) ---
+Set spStoredOutages = CreateObject("Scripting.Dictionary")
+Class Uniquizer
+    public function ReadOutage
+        spBranch.SetSel("sta")
+        ndx = spBranch.FindNextSel(-1)
+        OutagePrint = ""
+        while ndx >= 0
+            OutagePrint = OutagePrint & CStr(ndx) & ";"
+            ndx = spBranch.FindNextSel(ndx)
+        wend
+        If spStoredOutages.Exists(OutagePrint) Then
+            ReadOutage = 0
+        Else
+            spStoredOutages.Add OutagePrint,1
+            ReadOutage = 1
+        End If
+    end function
+End Class
+Set spUniquizer = new Uniquizer
+
+' --- Вспомогательные процедуры из файла вариантов ---
+Sub TopologyStore
+    On Error Resume Next
+    spNode.Cols.Add "staRes",PR_BOOL
+    spBranch.Cols.Add "staRes",PR_BOOL
+    On Error GoTo 0
+    spNode.SetSel ""
+    spNode.Cols("staRes").Calc("sta")
+    spBranch.SetSel ""
+    spBranch.Cols("staRes").Calc("sta")
+End Sub
+
+Sub TopologyRestore
+    spNode.SetSel ""
+    spNodeSta.Calc("staRes")
+    spBranch.SetSel ""
+    spBranchSta.Calc("staRes")
+End Sub
+
+Sub PrepareTemplate
+    FieldsAdded = 0
+    if spBranch.Cols.Find("Repair") < 0 Then
+        spBranch.Cols.Add "Repair", PR_BOOL
+        spBranch.Cols("Repair").Prop(FL_ZAG) = "Ремонт"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("Outage") < 0 Then
+        spBranch.Cols.Add "Outage", PR_BOOL
+        spBranch.Cols("Outage").Prop(FL_ZAG) = "Откл"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("Report") < 0 Then
+        spBranch.Cols.Add "Report", PR_BOOL
+        spBranch.Cols("Report").Prop(FL_ZАГ) = "Отчет"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("_SortKey") < 0 Then
+        spBranch.Cols.Add "_SortKey", PR_INT
+    End if
+    if FieldsAdded = 1 Then MsgBox "Добавлены поля Repair/Outage/Report. Сохраните модель, если нужно.",1,"Подготовка шаблона"
+End Sub
+
+Function PlaceOffs (byref V, OffCounter)
+    OffList = ""
+    for offc = 0 to OffCounter-1
+        if offc Then OffList = OffList + ","
+        spBranchSta.Z(V(offc)) = 1
+        GroupId = spBranchGrp.Z(V(offc))
+        if GroupId > 0 Then
+            spBranch.SetSel "groupid=" & CStr(GroupId)
+            spBranchSta.Calc 1
+            spBranch.SetSel ""
+        End If
+        if(OffList <> "") Then OffList = OffList +  "|" 
+        OffList = OffList + Cstr(spBranchNm.ZS(V(offc)))
+    next
+    PlaceOffs = OffList
+End function
+
+' --- Подготовка исходных списков ветвей/узлов ---
+Call TopologyStore
+Dim BranchIndexes(), NodeIndexes(), RepairIndexes(), OutageIndexes()
+
+spBranch.SetSel("Report")
+ReDim BranchIndexes(spBranch.Count-1)
+BranchCount = 0
+ndx = spBranch.FindNextSel(-1)
+While ndx >= 0
+    BranchIndexes(BranchCount) = ndx
+    BranchCount = BranchCount + 1
+    ndx = spBranch.FindNextSel(ndx)
+Wend
+
+spNode.SetSel("sel")
+ReDim NodeIndexes(spNode.Count-1)
+NodeCount = 0
+ndx = spNode.FindNextSel(-1)
+While ndx >= 0
+    NodeIndexes(NodeCount) = ndx
+    NodeCount = NodeCount + 1
+    ndx = spNode.FindNextSel(ndx)
+Wend
+
+spBranch.SetSel("Repair")
+ReDim RepairIndexes(spBranch.Count)
+BranchCount = 0
+ndx = spBranch.FindNextSel(-1)
+While ndx >= 0
+    RepairIndexes(BranchCount) = ndx
+    BranchCount  = BranchCount + 1
+    ndx = spBranch.FindNextSel(ndx)
+Wend
+
+spBranch.SetSel("Outage")
+ReDim OutageIndexes(spBranch.Count)
+BranchCount = 0
+ndx = spBranch.FindNextSel(-1)
+While ndx >= 0
+    OutageIndexes(BranchCount) = ndx
+    BranchCount  = BranchCount + 1
+    ndx = spBranch.FindNextSel(ndx)
+Wend
+
+If MaxRepair > UBound(RepairIndexes) Then MaxRepair = UBound(RepairIndexes)
+If MaxOutage > UBound(OutageIndexes) Then MaxOutage = UBound(OutageIndexes)
+
+Dim RepairComb, OutageComb
+Set RepairComb = new Combinator
+Set OutageComb = new Combinator
+Dim RepComb(), OutComb()
+
+' --- Функция расчёта динамики и записи результатов по генераторам ---
+Sub RunDynamicsAndWrite(genSheet, description)
+    ' genSheet: лист wsResult, resultRow — глобальный указатель строки
+    ' description: строка описания УР (Repair/Outage)
+    wsResult.Cells(resultRow, 1).Value = description
+    wsResult.Cells(resultRow, 1).Font.Bold = True
+    resultRow = resultRow + 1
+
+    ' заголовок блока
+    wsResult.Cells(resultRow, 1).Value = "Генератор"
+    wsResult.Cells(resultRow, 2).Value = "Max Delta"
+    wsResult.Cells(resultRow, 3).Value = "Min Delta"
+    wsResult.Cells(resultRow, 4).Value = "Время Max Delta"
+    wsResult.Cells(resultRow, 5).Value = "Нарушение устойчивости"
+    wsResult.Cells(resultRow, 6).Value = "Время нарушения устойчивости"
+    wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 6)).Font.Bold = True
+    resultRow = resultRow + 1
+
+    Dim scenarioBlockStart: scenarioBlockStart = resultRow
+
+    Set tblGen = Rastr.Tables("Generator")
+    If tblGen Is Nothing Then Exit Sub
+    Set colName = tblGen.Cols("Name")
+    If colName Is Nothing Then Exit Sub
+
+    Dim dataCol: dataCol = 1
+
+    For i = 0 To tblGen.Size - 1
+        genName = colName.ZS(i)
+
+        ' Пытаемся взять последний снимок (MaxSnapshotIndex=5 до 0)
+        Set Plot = Nothing
+        For snapIdx = 5 To 0 Step -1
+            On Error Resume Next
+            tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
+            errNum = Err.Number
+            On Error GoTo 0
+            If errNum = 0 And IsArray(tmpPlot) Then
+                Plot = tmpPlot
+                Exit For
+            End If
+        Next
+
+        If IsArray(Plot) Then
+            npoints = UBound(Plot, 1) + 1
+            If npoints > 0 Then
+                deltaCol = dataCol
+                timeCol = dataCol + 1
+                checkCol = dataCol + 2
+
+                wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
+                wsData.Cells(1, timeCol).Value = genName & " (Time)"
+                wsData.Cells(1, checkCol).Value = genName & " (>180)"
+
+                wsData.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
+                wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & deltaCol & ">180,ROW(),999999)"
+
+                deltaStartAddr = wsData.Cells(2, deltaCol).Address(False, False, 1, True)
+                deltaEndAddr = wsData.Cells(npoints + 1, deltaCol).Address(False, False, 1, True)
+                deltaRange = deltaStartAddr & ":" & deltaEndAddr
+
+                timeStartAddr = wsData.Cells(2, timeCol).Address(False, False, 1, True)
+                timeEndAddr = wsData.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
+                timeRange = timeStartAddr & ":" & timeEndAddr
+
+                checkStartAddr = wsData.Cells(2, checkCol).Address(False, False, 1, True)
+                checkEndAddr = wsData.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
+                checkRange = checkStartAddr & ":" & checkEndAddr
+
+                wsResult.Cells(resultRow, 1).Value = genName
+                wsResult.Cells(resultRow, 2).Formula = "=MAX(" & deltaRange & ")"
+                wsResult.Cells(resultRow, 3).Formula = "=MIN(" & deltaRange & ")"
+                wsResult.Cells(resultRow, 4).Formula = "=INDEX(" & timeRange & ",MATCH(MAX(" & deltaRange & ")," & deltaRange & ",0))"
+                wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>180,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
+                wsResult.Cells(resultRow, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+
+                resultRow = resultRow + 1
+                dataCol = dataCol + 3
+            End If
+        End If
+    Next
+
+    ' Фиксируем блок
+    Dim scenarioBlockEnd: scenarioBlockEnd = resultRow - 1
+    If scenarioBlockEnd >= scenarioBlockStart Then
+        xl.Calculate
+        wsResult.Range(wsResult.Cells(scenarioBlockStart, 1), wsResult.Cells(scenarioBlockEnd, 6)).Value = _
+            wsResult.Range(wsResult.Cells(scenarioBlockStart, 1), wsResult.Cells(scenarioBlockEnd, 6)).Value
+    End If
+End Sub
+
+' --- Основной цикл: сценарии -> комбинации Repair/Outage -> динамика по генераторам ---
+Dim scenarioCount: scenarioCount = 0
+If Not CreateObject("Scripting.FileSystemObject").FolderExists(ScenarioFolderPath) Then
+    MsgBox "Папка сценариев не найдена: " & ScenarioFolderPath, vbCritical, "Ошибка"
+Else
+    For Each f In CreateObject("Scripting.FileSystemObject").GetFolder(ScenarioFolderPath).Files
+        If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
+            Rastr.Load 1, f.Path, ScenarioTemplatePath
+            Set spFWDynamic = Rastr.FWDynamic
+            If Not spFWDynamic Is Nothing Then
+                If spFWDynamic.Run() = 0 Then
+                    scenarioCount = scenarioCount + 1
+                    wsData.Cells.Clear
+
+                    ' Заголовок сценария
+                    wsResult.Cells(resultRow, 1).Value = "Сценарий: " & f.Name
+                    wsResult.Cells(resultRow, 1).Font.Bold = True
+                    resultRow = resultRow + 1
+
+                    ' Перебор только Repair (аварийные отключения не используем)
+                    For RepOff = MaxRepair_count To MaxRepair
+                        RepairComb.Init RepairIndexes, RepOff, UBound(RepairIndexes)
+                        If RepairComb.FirstCombination(RepComb) Then
+                            Do
+                                ' Применяем выбранные Repair
+                                RepTitle = PlaceOffs(RepComb, RepOff)
+                                ' Запускаем расчёт динамики и запись результатов
+                                RunDynamicsAndWrite wsResult, "УР: " & RepTitle
+                                ' Восстанавливаем топологию после комбинации
+                                TopologyRestore
+                            Loop While RepairComb.NextCombination(RepComb)
+                        End If
+                    Next
+
+                End If
+            End If
+        End If
+    Next
+End If
+
+wsResult.Columns.AutoFit
+
+MsgBox "Обработка завершена. Сценариев: " & scenarioCount, vbInformation, "Готово"
+
+On Error Resume Next
+xl.DisplayAlerts = True
+On Error GoTo 0
+
+
