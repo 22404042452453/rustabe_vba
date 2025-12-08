@@ -165,16 +165,16 @@ wsResult.Columns.AutoFit
 MsgBox "Обработано сценариев: " & scenarioCount, vbInformation, "Готово"
 
 Cleanup:
+On Error Resume Next
 If Not xl Is Nothing Then
-    On Error Resume Next
     xl.DisplayAlerts = True
     ' xl.Quit ' Раскомментируйте, если нужно закрывать Excel автоматически
-    On Error GoTo 0
 End If
 Set wsData = Nothing
 Set wsResult = Nothing
 Set wb = Nothing
 Set xl = Nothing
 Set fso = Nothing
+On Error GoTo 0
 
 
