@@ -193,7 +193,9 @@ Sub RefreshRepairIndexes()
         ReDim RepairIndexes(0)
     End If
     totalRepairs = cnt
-    If MaxRepair > totalRepairs Then MaxRepair = totalRepairs
+    ' Автоподстройка границ перебора
+    If MaxRepair <= 0 Or MaxRepair > totalRepairs Then MaxRepair = totalRepairs
+    If MaxRepair_count < 0 Then MaxRepair_count = 0
     If MaxRepair_count > MaxRepair Then MaxRepair_count = MaxRepair
 End Sub
 
