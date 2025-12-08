@@ -173,55 +173,28 @@ Call TopologyStore
 Dim BranchIndexes(), NodeIndexes(), RepairIndexes()
 Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
 
-spBranch.SetSel("Report")
-ReDim BranchIndexes(spBranch.Count-1)
-BranchCount = 0
-ndx = spBranch.FindNextSel(-1)
-While ndx >= 0
-    BranchIndexes(BranchCount) = ndx
-    BranchCount = BranchCount + 1
-    ndx = spBranch.FindNextSel(ndx)
-Wend
-If BranchCount > 0 Then
-    ReDim Preserve BranchIndexes(BranchCount-1)
-Else
-    ReDim BranchIndexes(0)
-End If
-
-spNode.SetSel("sel")
-ReDim NodeIndexes(spNode.Count-1)
-NodeCount = 0
-ndx = spNode.FindNextSel(-1)
-While ndx >= 0
-    NodeIndexes(NodeCount) = ndx
-    NodeCount = NodeCount + 1
-    ndx = spNode.FindNextSel(ndx)
-Wend
-If NodeCount > 0 Then
-    ReDim Preserve NodeIndexes(NodeCount-1)
-Else
-    ReDim NodeIndexes(0)
-End If
-
-spBranch.SetSel("Repair")
-ReDim RepairIndexes(spBranch.Count)
-BranchCount = 0
-ndx = spBranch.FindNextSel(-1)
-While ndx >= 0
-    RepairIndexes(BranchCount) = ndx
-    BranchCount  = BranchCount + 1
-    ndx = spBranch.FindNextSel(ndx)
-Wend
-If BranchCount > 0 Then
-    ReDim Preserve RepairIndexes(BranchCount-1)
-Else
-    ReDim RepairIndexes(0)
-End If
-If MaxRepair > UBound(RepairIndexes) Then MaxRepair = UBound(RepairIndexes)
-
 Dim RepairComb
 Set RepairComb = new Combinator
 Dim RepComb()
+
+Sub RefreshRepairIndexes()
+    spBranch.SetSel("Repair")
+    ReDim RepairIndexes(spBranch.Count)
+    cnt = 0
+    ndx = spBranch.FindNextSel(-1)
+    While ndx >= 0
+        RepairIndexes(cnt) = ndx
+        cnt = cnt + 1
+        ndx = spBranch.FindNextSel(ndx)
+    Wend
+    If cnt > 0 Then
+        ReDim Preserve RepairIndexes(cnt-1)
+    Else
+        ReDim RepairIndexes(0)
+    End If
+    If MaxRepair > UBound(RepairIndexes) Then MaxRepair = UBound(RepairIndexes)
+    If MaxRepair_count > MaxRepair Then MaxRepair_count = MaxRepair
+End Sub
 
 ' --- Функция расчёта динамики и записи результатов по генераторам ---
 Sub RunDynamicsAndWrite(genSheet, description)
@@ -367,6 +340,10 @@ Else
                 Set spFWDynamic = Rastr.FWDynamic
                 If Not spFWDynamic Is Nothing Then
                     If spFWDynamic.Run() = 0 Then
+                        ' Зафиксировать исходную топологию сценария и перечень ремонтных ветвей
+                        TopologyStore
+                        RefreshRepairIndexes
+
                         scenarioCount = scenarioCount + 1
                         wsData.Cells.Clear
 
