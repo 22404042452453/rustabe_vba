@@ -37,6 +37,7 @@ End If
 ' --- Счетчик для результатов ---
 Dim genCount: genCount = 0
 Dim resultRow: resultRow = 2
+Dim dataCol: dataCol = 1 ' Отдельный счетчик для колонок данных (начинаем с 1)
 
 ' --- Цикл: обработка генераторов и вычисление Max/Min ---
 For i = 0 To tbl.Size - 1
@@ -53,33 +54,48 @@ For i = 0 To tbl.Size - 1
         Dim npoints: npoints = UBound(Plot, 1) + 1 ' Количество точек
         
         If npoints > 0 Then
-            ' --- Заголовки колонок ---
-            Dim timeCol: timeCol = i * 2 + 2 ' Колонка для Time
-            Dim deltaCol: deltaCol = i * 2 + 3 ' Колонка для Delta
+            ' --- Заголовки колонок (используем отдельный счетчик dataCol) ---
+            Dim timeCol: timeCol = dataCol ' Колонка для Time
+            Dim deltaCol: deltaCol = dataCol + 1 ' Колонка для Delta
             
             wsData.Cells(1, timeCol).Value = genName & " (Time)"
             wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
             
-            ' Запись массива данных (Plot - это массив [npoints x 2])
-            wsData.Cells(2, timeCol).Resize(npoints, 2).Value = Plot
+            ' Запись массива данных построчно (Plot - это массив [npoints x 2])
+            ' Одновременно вычисляем MAX и MIN для каждого генератора
+            Dim j
+            Dim maxDelta, minDelta, deltaVal
+            Dim firstDelta: firstDelta = True
             
-            ' --- Шаг 2: Создание формул MAX и MIN напрямую в wsResult ---
-            ' Формируем ссылку на диапазон Delta в R1C1 формате
-            Dim deltaRange: deltaRange = "'" & wsData.Name & "'!R2C" & deltaCol & ":R" & (npoints + 1) & "C" & deltaCol
+            For j = 0 To npoints - 1
+                wsData.Cells(j + 2, timeCol).Value = Plot(j, 0) ' Time
+                deltaVal = Plot(j, 1)
+                wsData.Cells(j + 2, deltaCol).Value = deltaVal ' Delta
+                
+                ' Вычисляем MAX и MIN прямо здесь (надежнее чем формулы Excel)
+                If firstDelta Then
+                    maxDelta = deltaVal
+                    minDelta = deltaVal
+                    firstDelta = False
+                Else
+                    If deltaVal > maxDelta Then maxDelta = deltaVal
+                    If deltaVal < minDelta Then minDelta = deltaVal
+                End If
+            Next
             
-            ' Записываем формулы в wsResult
+            ' --- Шаг 2: Записываем вычисленные MAX и MIN в wsResult ---
             wsResult.Cells(resultRow, 1).Value = genName
-            wsResult.Cells(resultRow, 2).FormulaR1C1 = "=MAX(" & deltaRange & ")"
-            wsResult.Cells(resultRow, 3).FormulaR1C1 = "=MIN(" & deltaRange & ")"
+            wsResult.Cells(resultRow, 2).Value = maxDelta
+            wsResult.Cells(resultRow, 3).Value = minDelta
             
             resultRow = resultRow + 1
             genCount = genCount + 1
+            
+            ' Увеличиваем счетчик колонок для следующего генератора (ПОСЛЕ использования deltaCol!)
+            dataCol = dataCol + 2
         End If
     End If
 Next
-
-' --- Вычисление всех формул один раз после цикла ---
-xl.Calculate
 
 ' --- Форматирование ---
 wsData.Columns.AutoFit
