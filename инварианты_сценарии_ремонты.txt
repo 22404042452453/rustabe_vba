@@ -25,6 +25,7 @@ wsResult.Name = "Результаты"
 
 ' Заголовок результирующего блока будет добавляться на лету
 Dim resultRow: resultRow = 1
+Dim TemplateFieldsAdded: TemplateFieldsAdded = 0
 
 ' --- Подготовка шаблона (из файла вариантов) ---
 PrepareTemplate
@@ -150,26 +151,26 @@ Sub TopologyRestore
 End Sub
 
 Sub PrepareTemplate
-    FieldsAdded = 0
+    TemplateFieldsAdded = 0
     if spBranch.Cols.Find("Repair") < 0 Then
         spBranch.Cols.Add "Repair", PR_BOOL
         spBranch.Cols("Repair").Prop(FL_ZAG) = "Ремонт"
-        FieldsAdded = 1
+        TemplateFieldsAdded = 1
     End If
     if spBranch.Cols.Find("Outage") < 0 Then
         spBranch.Cols.Add "Outage", PR_BOOL
         spBranch.Cols("Outage").Prop(FL_ZAG) = "Откл"
-        FieldsAdded = 1
+        TemplateFieldsAdded = 1
     End If
     if spBranch.Cols.Find("Report") < 0 Then
         spBranch.Cols.Add "Report", PR_BOOL
         spBranch.Cols("Report").Prop(FL_ZAG) = "Отчет"
-        FieldsAdded = 1
+        TemplateFieldsAdded = 1
     End If
     if spBranch.Cols.Find("_SortKey") < 0 Then
         spBranch.Cols.Add "_SortKey", PR_INT
     End if
-    if FieldsAdded = 1 Then MsgBox "Добавлены поля Repair/Outage/Report. Сохраните модель, если нужно.",1,"Подготовка шаблона"
+    if TemplateFieldsAdded = 1 Then MsgBox "Добавлены поля Repair/Outage/Report. Сохраните модель, если нужно.",1,"Подготовка шаблона"
 End Sub
 
 Function PlaceOffs (byref V, OffCounter)
@@ -334,6 +335,13 @@ End Sub
 
 ' --- Основной цикл: сценарии -> комбинации Repair/Outage -> динамика по генераторам ---
 Dim scenarioCount: scenarioCount = 0
+If TemplateFieldsAdded = 1 Then
+    MsgBox "Поля добавлены. Сохраните модель и запустите скрипт повторно для расчётов.", vbInformation, "Подготовка завершена"
+    On Error Resume Next
+    xl.DisplayAlerts = True
+    On Error GoTo 0
+    End
+End If
 If Not CreateObject("Scripting.FileSystemObject").FolderExists(ScenarioFolderPath) Then
     MsgBox "Папка сценариев не найдена: " & ScenarioFolderPath, vbCritical, "Ошибка"
 Else
