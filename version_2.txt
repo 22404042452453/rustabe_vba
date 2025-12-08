@@ -118,8 +118,6 @@ Else
                 End If
             End If
         Next
-
-NextScenario:
     End If
     Next
 End If
