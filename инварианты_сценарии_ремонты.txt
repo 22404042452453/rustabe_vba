@@ -315,6 +315,10 @@ Else
                         wsResult.Cells(resultRow, 1).Font.Bold = True
                         resultRow = resultRow + 1
 
+                        ' Базовый расчёт: нормальная схема без ремонтов
+                        RunDynamicsAndWrite wsResult, "УР: Нормальная схема"
+                        TopologyRestore
+
                         ' Перебор только Repair (аварийные отключения не используем)
                         For RepOff = MaxRepair_count To MaxRepair
                             RepairComb.Init RepairIndexes, RepOff, UBound(RepairIndexes)
@@ -323,7 +327,7 @@ Else
                                     ' Применяем выбранные Repair
                                     RepTitle = PlaceOffs(RepComb, RepOff)
                                     ' Запускаем расчёт динамики и запись результатов
-                                    RunDynamicsAndWrite wsResult, "УР: " & RepTitle
+                                    RunDynamicsAndWrite wsResult, "УР: Ремонт ВЛ - " & RepTitle
                                     ' Восстанавливаем топологию после комбинации
                                     TopologyRestore
                                 Loop While RepairComb.NextCombination(RepComb)
