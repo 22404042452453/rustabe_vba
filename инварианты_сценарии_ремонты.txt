@@ -339,42 +339,40 @@ Else
                 Rastr.Load 1, scnPath, ScenarioTemplatePath
                 Set spFWDynamic = Rastr.FWDynamic
                 If Not spFWDynamic Is Nothing Then
-                    If spFWDynamic.Run() = 0 Then
-                        ' Зафиксировать исходную топологию сценария и перечень ремонтных ветвей
-                        TopologyStore
-                        RefreshRepairIndexes
+                    ' Зафиксировать исходную топологию сценария и перечень ремонтных ветвей
+                    TopologyStore
+                    RefreshRepairIndexes
 
-                        scenarioCount = scenarioCount + 1
-                        wsData.Cells.Clear
+                    scenarioCount = scenarioCount + 1
+                    wsData.Cells.Clear
 
-                        ' Заголовок сценария
-                        wsResult.Cells(resultRow, 1).Value = "Сценарий: " & scnPath
-                        wsResult.Cells(resultRow, 1).Font.Bold = True
-                        resultRow = resultRow + 1
+                    ' Заголовок сценария
+                    wsResult.Cells(resultRow, 1).Value = "Сценарий: " & scnPath
+                    wsResult.Cells(resultRow, 1).Font.Bold = True
+                    resultRow = resultRow + 1
 
-                        ' Базовый расчёт: нормальная схема без ремонтов
-                        RunDynAndWriteSafe "УР: Нормальная схема"
-                        TopologyRestore
+                    ' Базовый расчёт: нормальная схема без ремонтов
+                    RunDynAndWriteSafe "УР: Нормальная схема"
+                    TopologyRestore
 
-                        ' Перебор только Repair (аварийные отключения не используем)
-                        maxRepBound = UBound(RepairIndexes)
-                        If MaxRepair > maxRepBound Then MaxRepair = maxRepBound
-                        If MaxRepair_count > MaxRepair Then MaxRepair_count = MaxRepair
-                        For RepOff = MaxRepair_count To MaxRepair
-                            RepairComb.Init RepairIndexes, RepOff, UBound(RepairIndexes)
-                            If RepairComb.FirstCombination(RepComb) Then
-                                Do
-                                    ' Применяем выбранные Repair
-                                    RepTitle = PlaceOffs(RepComb, RepOff)
-                                    ' Запускаем расчёт динамики и запись результатов
-                                    RunDynAndWriteSafe "УР: Ремонт ВЛ - " & RepTitle
-                                    ' Восстанавливаем топологию после комбинации
-                                    TopologyRestore
-                                Loop While RepairComb.NextCombination(RepComb)
-                            End If
-                        Next
+                    ' Перебор только Repair (аварийные отключения не используем)
+                    maxRepBound = UBound(RepairIndexes)
+                    If MaxRepair > maxRepBound Then MaxRepair = maxRepBound
+                    If MaxRepair_count > MaxRepair Then MaxRepair_count = MaxRepair
+                    For RepOff = MaxRepair_count To MaxRepair
+                        RepairComb.Init RepairIndexes, RepOff, UBound(RepairIndexes)
+                        If RepairComb.FirstCombination(RepComb) Then
+                            Do
+                                ' Применяем выбранные Repair
+                                RepTitle = PlaceOffs(RepComb, RepOff)
+                                ' Запускаем расчёт динамики и запись результатов
+                                RunDynAndWriteSafe "УР: Ремонт ВЛ - " & RepTitle
+                                ' Восстанавливаем топологию после комбинации
+                                TopologyRestore
+                            Loop While RepairComb.NextCombination(RepComb)
+                        End If
+                    Next
 
-                    End If
                 End If
             Next
         End If
