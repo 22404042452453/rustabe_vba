@@ -39,14 +39,21 @@ Else
     For Each f In fso.GetFolder(ScenarioFolderPath).Files
         If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
             ' Загружаем сценарий
-            Rastr.Load 1, f.Path, ScenarioTemplatePath
-            Set spFWDynamic = Rastr.FWDynamic
-            If spFWDynamic Is Nothing Then
-                MsgBox "FWDynamic не доступен для сценария: " & f.Name, vbExclamation, "Пропуск"
-            ElseIf spFWDynamic.Run() <> 0 Then
-                MsgBox "Ошибка расчета FWDynamic: " & f.Name, vbExclamation, "Пропуск"
+            Dim loadResult: loadResult = 0
+            On Error Resume Next
+            loadResult = Rastr.Load(1, f.Path, ScenarioTemplatePath)
+            errNum = Err.Number
+            On Error GoTo 0
+            If errNum <> 0 Or loadResult <> 0 Then
+                MsgBox "Не удалось загрузить сценарий: " & f.Name & " (код=" & loadResult & ")", vbExclamation, "Пропуск"
             Else
-                scenarioCount = scenarioCount + 1
+                Set spFWDynamic = Rastr.FWDynamic
+                If spFWDynamic Is Nothing Then
+                    MsgBox "FWDynamic не доступен для сценария: " & f.Name, vbExclamation, "Пропуск"
+                ElseIf spFWDynamic.Run() <> 0 Then
+                    MsgBox "Ошибка расчета FWDynamic: " & f.Name, vbExclamation, "Пропуск"
+                Else
+                    scenarioCount = scenarioCount + 1
 
             ' Очищаем лист данных перед новым сценарием
             wsData.Cells.Clear
@@ -65,6 +72,9 @@ Else
             wsResult.Cells(resultRow, 6).Value = "Время нарушения устойчивости"
             wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 6)).Font.Bold = True
             resultRow = resultRow + 1
+
+            ' Запоминаем начало блока строк результатов для текущего сценария
+            Dim scenarioBlockStart: scenarioBlockStart = resultRow
 
                 ' Таблица генераторов
                 On Error Resume Next
