@@ -65,57 +65,34 @@ For i = 0 To tbl.Size - 1
             wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
             wsData.Cells(1, timeCol).Value = genName & " (Time)"
             
-            ' Запись массива данных построчно для анализа нарушений устойчивости
-            ' Одновременно находим время максимальной Delta и проверяем нарушение устойчивости
-            Dim j
-            Dim maxDelta, minDelta, maxDeltaTime, deltaVal, timeVal
-            Dim firstDelta: firstDelta = True
-            Dim stabilityViolated: stabilityViolated = False
-            Dim stabilityViolationTime: stabilityViolationTime = Empty
+            ' Запись массива данных целиком через Resize (Plot - это массив [npoints x 2])
+            ' Plot(j, 0) -> deltaCol, Plot(j, 1) -> timeCol
+            wsData.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
             
-            For j = 0 To npoints - 1
-                deltaVal = CDbl(Plot(j, 0)) ' Delta
-                timeVal = CDbl(Plot(j, 1)) ' Time
-                
-                ' Записываем данные в Excel
-                wsData.Cells(j + 2, deltaCol).Value = deltaVal
-                wsData.Cells(j + 2, timeCol).Value = timeVal
-                
-                ' Находим MAX и MIN Delta, а также время максимальной Delta
-                If firstDelta Then
-                    maxDelta = deltaVal
-                    minDelta = deltaVal
-                    maxDeltaTime = timeVal
-                    firstDelta = False
-                Else
-                    If deltaVal > maxDelta Then
-                        maxDelta = deltaVal
-                        maxDeltaTime = timeVal
-                    End If
-                    If deltaVal < minDelta Then minDelta = deltaVal
-                End If
-                
-                ' Проверяем нарушение устойчивости (Delta > 180 градусов)
-                If Not stabilityViolated And deltaVal > 180 Then
-                    stabilityViolated = True
-                    stabilityViolationTime = timeVal
-                End If
-            Next
+            ' --- Шаг 2: Создание формул MAX и MIN в wsResult, ссылающихся на wsData ---
+            ' Используем формат A1 с указанием листа для межлистовых ссылок
+            Dim deltaStartAddr: deltaStartAddr = wsData.Cells(2, deltaCol).Address(False, False, 1, True)
+            Dim deltaEndAddr: deltaEndAddr = wsData.Cells(npoints + 1, deltaCol).Address(False, False, 1, True)
+            Dim deltaRange: deltaRange = deltaStartAddr & ":" & deltaEndAddr
+            Dim timeStartAddr: timeStartAddr = wsData.Cells(2, timeCol).Address(False, False, 1, True)
+            Dim timeEndAddr: timeEndAddr = wsData.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
+            Dim timeRange: timeRange = timeStartAddr & ":" & timeEndAddr
             
-            ' --- Шаг 2: Записываем результаты в wsResult ---
+            ' Записываем формулы в wsResult
             wsResult.Cells(resultRow, 1).Value = genName
-            wsResult.Cells(resultRow, 2).Value = maxDelta
-            wsResult.Cells(resultRow, 3).Value = minDelta
-            wsResult.Cells(resultRow, 4).Value = maxDeltaTime
+            wsResult.Cells(resultRow, 2).Formula = "=MAX(" & deltaRange & ")"
+            wsResult.Cells(resultRow, 3).Formula = "=MIN(" & deltaRange & ")"
             
-            ' Нарушение устойчивости
-            If stabilityViolated Then
-                wsResult.Cells(resultRow, 5).Value = "нарушение устойчивости"
-                wsResult.Cells(resultRow, 6).Value = stabilityViolationTime
-            Else
-                wsResult.Cells(resultRow, 5).Value = "нарушение устойчивости не выявлено"
-                wsResult.Cells(resultRow, 6).Value = ""
-            End If
+            ' Время максимальной Delta (используем INDEX+MATCH)
+            wsResult.Cells(resultRow, 4).Formula = "=INDEX(" & timeRange & ",MATCH(MAX(" & deltaRange & ")," & deltaRange & ",0))"
+            
+            ' Нарушение устойчивости (проверяем, есть ли значения > 180)
+            wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>180,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
+            
+            ' Время нарушения устойчивости (время первого значения > 180)
+            ' Используем формулу массива для поиска первого значения > 180
+            ' Формула: IF(MAX>180, INDEX времени по позиции MATCH первого TRUE в массиве проверки >180)
+            wsResult.Cells(resultRow, 6).Formula = "=IF(MAX(" & deltaRange & ")>180,INDEX(" & timeRange & ",MATCH(TRUE,INDEX(" & deltaRange & ">180,0),0)),"""")"
             
             resultRow = resultRow + 1
             genCount = genCount + 1
@@ -125,6 +102,9 @@ For i = 0 To tbl.Size - 1
         End If
     End If
 Next
+
+' --- Вычисление всех формул один раз после цикла ---
+xl.Calculate
 
 ' --- Форматирование ---
 wsData.Columns.AutoFit
