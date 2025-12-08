@@ -308,6 +308,17 @@ Sub RunDynamicsAndWrite(genSheet, description)
     End If
 End Sub
 
+' Запуск динамики и запись результатов для текущей топологии
+Sub RunDynAndWriteSafe(description)
+    runRes = spFWDynamic.Run()
+    If runRes = 0 Then
+        RunDynamicsAndWrite wsResult, description
+    Else
+        wsResult.Cells(resultRow, 1).Value = description & " — ошибка расчёта динамики (код " & runRes & ")"
+        resultRow = resultRow + 1
+    End If
+End Sub
+
 ' --- Основной цикл: сценарии -> комбинации Repair -> динамика по генераторам ---
 Dim scenarioCount: scenarioCount = 0
 Dim scenarioList()
@@ -353,7 +364,7 @@ Else
                         resultRow = resultRow + 1
 
                         ' Базовый расчёт: нормальная схема без ремонтов
-                        RunDynamicsAndWrite wsResult, "УР: Нормальная схема"
+                        RunDynAndWriteSafe "УР: Нормальная схема"
                         TopologyRestore
 
                         ' Перебор только Repair (аварийные отключения не используем)
@@ -367,7 +378,7 @@ Else
                                     ' Применяем выбранные Repair
                                     RepTitle = PlaceOffs(RepComb, RepOff)
                                     ' Запускаем расчёт динамики и запись результатов
-                                    RunDynamicsAndWrite wsResult, "УР: Ремонт ВЛ - " & RepTitle
+                                    RunDynAndWriteSafe "УР: Ремонт ВЛ - " & RepTitle
                                     ' Восстанавливаем топологию после комбинации
                                     TopologyRestore
                                 Loop While RepairComb.NextCombination(RepComb)
