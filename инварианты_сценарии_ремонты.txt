@@ -192,7 +192,8 @@ Sub RefreshRepairIndexes()
     Else
         ReDim RepairIndexes(0)
     End If
-    If MaxRepair > UBound(RepairIndexes) Then MaxRepair = UBound(RepairIndexes)
+    totalRepairs = cnt
+    If MaxRepair > totalRepairs Then MaxRepair = totalRepairs
     If MaxRepair_count > MaxRepair Then MaxRepair_count = MaxRepair
 End Sub
 
@@ -356,11 +357,15 @@ Else
                     TopologyRestore
 
                     ' Перебор только Repair (аварийные отключения не используем)
-                    maxRepBound = UBound(RepairIndexes)
-                    If MaxRepair > maxRepBound Then MaxRepair = maxRepBound
+                    totalRepairs = UBound(RepairIndexes) + 1
+                    If MaxRepair > totalRepairs Then MaxRepair = totalRepairs
                     If MaxRepair_count > MaxRepair Then MaxRepair_count = MaxRepair
                     For RepOff = MaxRepair_count To MaxRepair
-                        RepairComb.Init RepairIndexes, RepOff, UBound(RepairIndexes)
+                        If RepOff = 0 Then
+                            ' нулевая комбинация (ничего не отключаем)
+                            RunDynAndWriteSafe "УР: Ремонт ВЛ - (без отключений)"
+                        Else
+                            RepairComb.Init RepairIndexes, RepOff, totalRepairs
                         If RepairComb.FirstCombination(RepComb) Then
                             Do
                                 ' Применяем выбранные Repair
@@ -370,6 +375,7 @@ Else
                                 ' Восстанавливаем топологию после комбинации
                                 TopologyRestore
                             Loop While RepairComb.NextCombination(RepComb)
+                        End If
                         End If
                     Next
 
