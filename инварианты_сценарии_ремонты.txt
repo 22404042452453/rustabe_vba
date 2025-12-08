@@ -357,6 +357,9 @@ Else
                         TopologyRestore
 
                         ' Перебор только Repair (аварийные отключения не используем)
+                        maxRepBound = UBound(RepairIndexes)
+                        If MaxRepair > maxRepBound Then MaxRepair = maxRepBound
+                        If MaxRepair_count > MaxRepair Then MaxRepair_count = MaxRepair
                         For RepOff = MaxRepair_count To MaxRepair
                             RepairComb.Init RepairIndexes, RepOff, UBound(RepairIndexes)
                             If RepairComb.FirstCombination(RepComb) Then
