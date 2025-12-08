@@ -373,7 +373,12 @@ Else
                                 RunDynAndWriteSafe "УР: Ремонт ВЛ - " & RepTitle
                                 ' Восстанавливаем топологию после комбинации
                                 TopologyRestore
-                            Loop While RepairComb.NextCombination(RepComb)
+
+                                hasNext = RepairComb.NextCombination(RepComb)
+                                If hasNext = 0 Then
+                                    Exit Do ' последний набор уже сформирован
+                                End If
+                            Loop
                         End If
                     Next
 
