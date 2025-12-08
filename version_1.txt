@@ -55,14 +55,16 @@ For i = 0 To tbl.Size - 1
         
         If npoints > 0 Then
             ' --- Заголовки колонок (используем отдельный счетчик dataCol) ---
-            Dim timeCol: timeCol = dataCol ' Колонка для Time
-            Dim deltaCol: deltaCol = dataCol + 1 ' Колонка для Delta
+            ' В массиве Plot: Plot(j, 0) = Delta, Plot(j, 1) = Time
+            Dim deltaCol: deltaCol = dataCol ' Колонка для Delta (первая в массиве)
+            Dim timeCol: timeCol = dataCol + 1 ' Колонка для Time (вторая в массиве)
             
-            wsData.Cells(1, timeCol).Value = genName & " (Time)"
             wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
+            wsData.Cells(1, timeCol).Value = genName & " (Time)"
             
             ' Запись массива данных целиком через Resize (Plot - это массив [npoints x 2])
-            wsData.Cells(2, timeCol).Resize(npoints, 2).Value = Plot
+            ' Plot(j, 0) -> deltaCol, Plot(j, 1) -> timeCol
+            wsData.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
             
             ' --- Шаг 2: Создание формул MAX и MIN в wsResult, ссылающихся на wsData ---
             ' Используем формат A1 с указанием листа для межлистовых ссылок
