@@ -23,10 +23,8 @@ Dim scenarioCount: scenarioCount = 0
 ' --- Обход файлов сценариев ---
 If Not fso.FolderExists(ScenarioFolderPath) Then
     MsgBox "Папка сценариев не найдена: " & ScenarioFolderPath, vbCritical, "Ошибка"
-    GoTo Cleanup
-End If
-
-For Each f In fso.GetFolder(ScenarioFolderPath).Files
+Else
+    For Each f In fso.GetFolder(ScenarioFolderPath).Files
     If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
         ' Загружаем сценарий
         Rastr.Load 1, f.Path, ScenarioTemplatePath
@@ -131,7 +129,8 @@ For Each f In fso.GetFolder(ScenarioFolderPath).Files
 
 NextScenario:
     End If
-Next
+    Next
+End If
 
 ' --- Пересчет формул и форматирование ---
 xl.Calculate
