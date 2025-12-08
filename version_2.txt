@@ -140,6 +140,14 @@ Else
                                 End If
                             End If
                         Next
+
+                        ' Зафиксировать результаты текущего сценария (убрать ссылки на wsData)
+                        Dim scenarioBlockEnd: scenarioBlockEnd = resultRow - 1
+                        If scenarioBlockEnd >= scenarioBlockStart Then
+                            xl.Calculate
+                            wsResult.Range(wsResult.Cells(scenarioBlockStart, 1), wsResult.Cells(scenarioBlockEnd, 6)).Value = _
+                                wsResult.Range(wsResult.Cells(scenarioBlockStart, 1), wsResult.Cells(scenarioBlockEnd, 6)).Value
+                        End If
                     End If
                 End If
             End If
