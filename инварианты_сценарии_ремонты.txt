@@ -127,6 +127,12 @@ Sub TopologyRestore
     spBranchSta.Calc("staRes")
 End Sub
 
+' Пересчёт режима (устойчивость/расчёт мощности) перед динамикой
+Function SolveUR()
+    ' 0 — успех; любые другие коды считаем ошибкой
+    SolveUR = Rastr.rgm("p") ' или нужный код расчёта УР, совпадающий с вариантом
+End Function
+
 Sub PrepareTemplate
     TemplateFieldsAdded = 0
     if spBranch.Cols.Find("Repair") < 0 Then
@@ -310,11 +316,17 @@ End Sub
 
 ' Запуск динамики и запись результатов для текущей топологии
 Sub RunDynAndWriteSafe(description)
-    runRes = spFWDynamic.Run()
-    If runRes = 0 Then
+    urRes = SolveUR()
+    If urRes <> 0 Then
+        wsResult.Cells(resultRow, 1).Value = description & " — ошибка расчёта УР (код " & urRes & ")"
+        resultRow = resultRow + 1
+        Exit Sub
+    End If
+    dynRes = spFWDynamic.Run()
+    If dynRes = 0 Then
         RunDynamicsAndWrite wsResult, description
     Else
-        wsResult.Cells(resultRow, 1).Value = description & " — ошибка расчёта динамики (код " & runRes & ")"
+        wsResult.Cells(resultRow, 1).Value = description & " — ошибка расчёта динамики (код " & dynRes & ")"
         resultRow = resultRow + 1
     End If
 End Sub
