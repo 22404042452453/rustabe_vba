@@ -363,8 +363,8 @@ Else
                     If MaxRepair > totalRepairs Then MaxRepair = totalRepairs
                     ' Перебор от MaxRepair_count до MaxRepair (без обязательного нуля)
                     For RepOff = MaxRepair_count To MaxRepair
-                        ' n в комбинаторе — верхняя граница индексов (UBound массива)
-                        RepairComb.Init RepairIndexes, RepOff, UBound(RepairIndexes)
+                        ' n в комбинаторе — количество элементов (totalRepairs)
+                        RepairComb.Init RepairIndexes, RepOff, totalRepairs
                         If RepairComb.FirstCombination(RepComb) Then
                             Do
                                 ' Применяем выбранные Repair
