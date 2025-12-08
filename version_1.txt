@@ -68,8 +68,8 @@ For i = 0 To tbl.Size - 1
             Dim firstDelta: firstDelta = True
             
             For j = 0 To npoints - 1
-                wsData.Cells(j + 2, timeCol).Value = Plot(j, 0) ' Time
-                deltaVal = Plot(j, 1)
+                wsData.Cells(j + 2, timeCol).Value = CDbl(Plot(j, 0)) ' Time
+                deltaVal = CDbl(Plot(j, 1))
                 wsData.Cells(j + 2, deltaCol).Value = deltaVal ' Delta
                 
                 ' Вычисляем MAX и MIN прямо здесь (надежнее чем формулы Excel)
