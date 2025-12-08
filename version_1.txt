@@ -12,6 +12,9 @@ wsResult.Name = "Результаты"
 wsResult.Cells(1, 1).Value = "Генератор"
 wsResult.Cells(1, 2).Value = "Max Delta"
 wsResult.Cells(1, 3).Value = "Min Delta"
+wsResult.Cells(1, 4).Value = "Время Max Delta"
+wsResult.Cells(1, 5).Value = "Нарушение устойчивости"
+wsResult.Cells(1, 6).Value = "Время нарушения устойчивости"
 
 ' --- Получение таблицы генераторов ---
 On Error Resume Next
@@ -62,20 +65,57 @@ For i = 0 To tbl.Size - 1
             wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
             wsData.Cells(1, timeCol).Value = genName & " (Time)"
             
-            ' Запись массива данных целиком через Resize (Plot - это массив [npoints x 2])
-            ' Plot(j, 0) -> deltaCol, Plot(j, 1) -> timeCol
-            wsData.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
+            ' Запись массива данных построчно для анализа нарушений устойчивости
+            ' Одновременно находим время максимальной Delta и проверяем нарушение устойчивости
+            Dim j
+            Dim maxDelta, minDelta, maxDeltaTime, deltaVal, timeVal
+            Dim firstDelta: firstDelta = True
+            Dim stabilityViolated: stabilityViolated = False
+            Dim stabilityViolationTime: stabilityViolationTime = Empty
             
-            ' --- Шаг 2: Создание формул MAX и MIN в wsResult, ссылающихся на wsData ---
-            ' Используем формат A1 с указанием листа для межлистовых ссылок
-            Dim deltaStartAddr: deltaStartAddr = wsData.Cells(2, deltaCol).Address(False, False, 1, True)
-            Dim deltaEndAddr: deltaEndAddr = wsData.Cells(npoints + 1, deltaCol).Address(False, False, 1, True)
-            Dim deltaRange: deltaRange = deltaStartAddr & ":" & deltaEndAddr
+            For j = 0 To npoints - 1
+                deltaVal = CDbl(Plot(j, 0)) ' Delta
+                timeVal = CDbl(Plot(j, 1)) ' Time
+                
+                ' Записываем данные в Excel
+                wsData.Cells(j + 2, deltaCol).Value = deltaVal
+                wsData.Cells(j + 2, timeCol).Value = timeVal
+                
+                ' Находим MAX и MIN Delta, а также время максимальной Delta
+                If firstDelta Then
+                    maxDelta = deltaVal
+                    minDelta = deltaVal
+                    maxDeltaTime = timeVal
+                    firstDelta = False
+                Else
+                    If deltaVal > maxDelta Then
+                        maxDelta = deltaVal
+                        maxDeltaTime = timeVal
+                    End If
+                    If deltaVal < minDelta Then minDelta = deltaVal
+                End If
+                
+                ' Проверяем нарушение устойчивости (Delta > 180 градусов)
+                If Not stabilityViolated And deltaVal > 180 Then
+                    stabilityViolated = True
+                    stabilityViolationTime = timeVal
+                End If
+            Next
             
-            ' Записываем формулы в wsResult
+            ' --- Шаг 2: Записываем результаты в wsResult ---
             wsResult.Cells(resultRow, 1).Value = genName
-            wsResult.Cells(resultRow, 2).Formula = "=MAX(" & deltaRange & ")"
-            wsResult.Cells(resultRow, 3).Formula = "=MIN(" & deltaRange & ")"
+            wsResult.Cells(resultRow, 2).Value = maxDelta
+            wsResult.Cells(resultRow, 3).Value = minDelta
+            wsResult.Cells(resultRow, 4).Value = maxDeltaTime
+            
+            ' Нарушение устойчивости
+            If stabilityViolated Then
+                wsResult.Cells(resultRow, 5).Value = "нарушение устойчивости"
+                wsResult.Cells(resultRow, 6).Value = stabilityViolationTime
+            Else
+                wsResult.Cells(resultRow, 5).Value = "нарушение устойчивости не выявлено"
+                wsResult.Cells(resultRow, 6).Value = ""
+            End If
             
             resultRow = resultRow + 1
             genCount = genCount + 1
@@ -86,15 +126,12 @@ For i = 0 To tbl.Size - 1
     End If
 Next
 
-' --- Вычисление всех формул один раз после цикла ---
-xl.Calculate
-
 ' --- Форматирование ---
 wsData.Columns.AutoFit
 wsResult.Columns.AutoFit
 
 ' --- Форматирование заголовков результатов ---
-With wsResult.Range("A1:C1")
+With wsResult.Range("A1:F1")
     .Font.Bold = True
     .Interior.Color = RGB(200, 200, 200)
 End With
