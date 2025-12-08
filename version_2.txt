@@ -20,21 +20,33 @@ wsResult.Name = "Результаты"
 Dim resultRow: resultRow = 1
 Dim scenarioCount: scenarioCount = 0
 
+' --- Предварительный поиск сценариев ---
+Dim foundScnFiles: foundScnFiles = 0
+If fso.FolderExists(ScenarioFolderPath) Then
+    For Each f In fso.GetFolder(ScenarioFolderPath).Files
+        If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
+            foundScnFiles = foundScnFiles + 1
+        End If
+    Next
+End If
+
 ' --- Обход файлов сценариев ---
 If Not fso.FolderExists(ScenarioFolderPath) Then
     MsgBox "Папка сценариев не найдена: " & ScenarioFolderPath, vbCritical, "Ошибка"
+ElseIf foundScnFiles = 0 Then
+    MsgBox "В папке нет .scn сценариев (кроме шаблона).", vbExclamation, "Нет данных"
 Else
     For Each f In fso.GetFolder(ScenarioFolderPath).Files
-    If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
-        ' Загружаем сценарий
-        Rastr.Load 1, f.Path, ScenarioTemplatePath
-        Set spFWDynamic = Rastr.FWDynamic
-        If spFWDynamic Is Nothing Then
-            MsgBox "FWDynamic не доступен для сценария: " & f.Name, vbExclamation, "Пропуск"
-        ElseIf spFWDynamic.Run() <> 0 Then
-            MsgBox "Ошибка расчета FWDynamic: " & f.Name, vbExclamation, "Пропуск"
-        Else
-            scenarioCount = scenarioCount + 1
+        If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
+            ' Загружаем сценарий
+            Rastr.Load 1, f.Path, ScenarioTemplatePath
+            Set spFWDynamic = Rastr.FWDynamic
+            If spFWDynamic Is Nothing Then
+                MsgBox "FWDynamic не доступен для сценария: " & f.Name, vbExclamation, "Пропуск"
+            ElseIf spFWDynamic.Run() <> 0 Then
+                MsgBox "Ошибка расчета FWDynamic: " & f.Name, vbExclamation, "Пропуск"
+            Else
+                scenarioCount = scenarioCount + 1
 
             ' Очищаем лист данных перед новым сценарием
             wsData.Cells.Clear
@@ -54,71 +66,74 @@ Else
             wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 6)).Font.Bold = True
             resultRow = resultRow + 1
 
-        ' Таблица генераторов
-        On Error Resume Next
-        Set tbl = Rastr.Tables("Generator")
-        errNum = Err.Number
-        On Error GoTo 0
-        If errNum <> 0 Or tbl Is Nothing Then
-            MsgBox "Таблица Generator недоступна в сценарии: " & f.Name, vbExclamation, "Пропуск"
-        Else
-            Set colName = tbl.Cols("Name")
-            If colName Is Nothing Then
-                MsgBox "Колонка Name отсутствует в Generator: " & f.Name, vbExclamation, "Пропуск"
-            Else
-                Dim dataCol: dataCol = 1 ' колонки на wsData: Delta, Time, Check>180
+                ' Таблица генераторов
+                On Error Resume Next
+                Set tbl = Rastr.Tables("Generator")
+                errNum = Err.Number
+                On Error GoTo 0
+                If errNum <> 0 Or tbl Is Nothing Then
+                    MsgBox "Таблица Generator недоступна в сценарии: " & f.Name, vbExclamation, "Пропуск"
+                Else
+                    Set colName = tbl.Cols("Name")
+                    If colName Is Nothing Then
+                        MsgBox "Колонка Name отсутствует в Generator: " & f.Name, vbExclamation, "Пропуск"
+                    Else
+                        Dim dataCol: dataCol = 1 ' колонки на wsData: Delta, Time, Check>180
 
-        For i = 0 To tbl.Size - 1
-            genName = colName.ZS(i)
+                        For i = 0 To tbl.Size - 1
+                            genName = colName.ZS(i)
 
-            On Error Resume Next
-            Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, 0)
-            errNum = Err.Number
-            On Error GoTo 0
+                            On Error Resume Next
+                            Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, 0)
+                            errNum = Err.Number
+                            On Error GoTo 0
 
-            If errNum = 0 And IsArray(Plot) Then
-                npoints = UBound(Plot, 1) + 1
-                If npoints > 0 Then
-                    deltaCol = dataCol
-                    timeCol = dataCol + 1
-                    checkCol = dataCol + 2
+                            If errNum = 0 And IsArray(Plot) Then
+                                npoints = UBound(Plot, 1) + 1
+                                If npoints > 0 Then
+                                    deltaCol = dataCol
+                                    timeCol = dataCol + 1
+                                    checkCol = dataCol + 2
 
-                    wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
-                    wsData.Cells(1, timeCol).Value = genName & " (Time)"
-                    wsData.Cells(1, checkCol).Value = genName & " (>180)"
+                                    wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
+                                    wsData.Cells(1, timeCol).Value = genName & " (Time)"
+                                    wsData.Cells(1, checkCol).Value = genName & " (>180)"
 
-                    ' Запись массива в две колонки: Delta, Time
-                    wsData.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
-                    ' Вспомогательная колонка: если Delta > 180, то номер строки, иначе большое число
-                    wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & deltaCol & ">180,ROW(),999999)"
+                                    ' Запись массива в две колонки: Delta, Time
+                                    wsData.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
+                                    ' Вспомогательная колонка: если Delta > 180, то номер строки, иначе большое число
+                                    wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & deltaCol & ">180,ROW(),999999)"
 
-                    ' Диапазоны
-                    deltaStartAddr = wsData.Cells(2, deltaCol).Address(False, False, 1, True)
-                    deltaEndAddr = wsData.Cells(npoints + 1, deltaCol).Address(False, False, 1, True)
-                    deltaRange = deltaStartAddr & ":" & deltaEndAddr
+                                    ' Диапазоны
+                                    deltaStartAddr = wsData.Cells(2, deltaCol).Address(False, False, 1, True)
+                                    deltaEndAddr = wsData.Cells(npoints + 1, deltaCol).Address(False, False, 1, True)
+                                    deltaRange = deltaStartAddr & ":" & deltaEndAddr
 
-                    timeStartAddr = wsData.Cells(2, timeCol).Address(False, False, 1, True)
-                    timeEndAddr = wsData.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
-                    timeRange = timeStartAddr & ":" & timeEndAddr
+                                    timeStartAddr = wsData.Cells(2, timeCol).Address(False, False, 1, True)
+                                    timeEndAddr = wsData.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
+                                    timeRange = timeStartAddr & ":" & timeEndAddr
 
-                    checkStartAddr = wsData.Cells(2, checkCol).Address(False, False, 1, True)
-                    checkEndAddr = wsData.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
-                    checkRange = checkStartAddr & ":" & checkEndAddr
+                                    checkStartAddr = wsData.Cells(2, checkCol).Address(False, False, 1, True)
+                                    checkEndAddr = wsData.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
+                                    checkRange = checkStartAddr & ":" & checkEndAddr
 
-                    ' Запись формул в результирующий лист
-                    wsResult.Cells(resultRow, 1).Value = genName
-                    wsResult.Cells(resultRow, 2).Formula = "=MAX(" & deltaRange & ")"
-                    wsResult.Cells(resultRow, 3).Formula = "=MIN(" & deltaRange & ")"
-                    wsResult.Cells(resultRow, 4).Formula = "=INDEX(" & timeRange & ",MATCH(MAX(" & deltaRange & ")," & deltaRange & ",0))"
-                    wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>180,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
-                    wsResult.Cells(resultRow, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+                                    ' Запись формул в результирующий лист
+                                    wsResult.Cells(resultRow, 1).Value = genName
+                                    wsResult.Cells(resultRow, 2).Formula = "=MAX(" & deltaRange & ")"
+                                    wsResult.Cells(resultRow, 3).Formula = "=MIN(" & deltaRange & ")"
+                                    wsResult.Cells(resultRow, 4).Formula = "=INDEX(" & timeRange & ",MATCH(MAX(" & deltaRange & ")," & deltaRange & ",0))"
+                                    wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>180,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
+                                    wsResult.Cells(resultRow, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
 
-                    resultRow = resultRow + 1
-                    dataCol = dataCol + 3
+                                    resultRow = resultRow + 1
+                                    dataCol = dataCol + 3
+                                End If
+                            End If
+                        Next
+                    End If
                 End If
             End If
-        Next
-    End If
+        End If
     Next
 End If
 
