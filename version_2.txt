@@ -31,32 +31,28 @@ Else
         Set spFWDynamic = Rastr.FWDynamic
         If spFWDynamic Is Nothing Then
             MsgBox "FWDynamic не доступен для сценария: " & f.Name, vbExclamation, "Пропуск"
-            GoTo NextScenario
-        End If
-        If spFWDynamic.Run() <> 0 Then
+        ElseIf spFWDynamic.Run() <> 0 Then
             MsgBox "Ошибка расчета FWDynamic: " & f.Name, vbExclamation, "Пропуск"
-            GoTo NextScenario
-        End If
+        Else
+            scenarioCount = scenarioCount + 1
 
-        scenarioCount = scenarioCount + 1
+            ' Очищаем лист данных перед новым сценарием
+            wsData.Cells.Clear
 
-        ' Очищаем лист данных перед новым сценарием
-        wsData.Cells.Clear
+            ' Строка с названием сценария
+            wsResult.Cells(resultRow, 1).Value = "Сценарий: " & f.Name
+            wsResult.Cells(resultRow, 1).Font.Bold = True
+            resultRow = resultRow + 1
 
-        ' Строка с названием сценария
-        wsResult.Cells(resultRow, 1).Value = "Сценарий: " & f.Name
-        wsResult.Cells(resultRow, 1).Font.Bold = True
-        resultRow = resultRow + 1
-
-        ' Заголовок блока результатов
-        wsResult.Cells(resultRow, 1).Value = "Генератор"
-        wsResult.Cells(resultRow, 2).Value = "Max Delta"
-        wsResult.Cells(resultRow, 3).Value = "Min Delta"
-        wsResult.Cells(resultRow, 4).Value = "Время Max Delta"
-        wsResult.Cells(resultRow, 5).Value = "Нарушение устойчивости"
-        wsResult.Cells(resultRow, 6).Value = "Время нарушения устойчивости"
-        wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 6)).Font.Bold = True
-        resultRow = resultRow + 1
+            ' Заголовок блока результатов
+            wsResult.Cells(resultRow, 1).Value = "Генератор"
+            wsResult.Cells(resultRow, 2).Value = "Max Delta"
+            wsResult.Cells(resultRow, 3).Value = "Min Delta"
+            wsResult.Cells(resultRow, 4).Value = "Время Max Delta"
+            wsResult.Cells(resultRow, 5).Value = "Нарушение устойчивости"
+            wsResult.Cells(resultRow, 6).Value = "Время нарушения устойчивости"
+            wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 6)).Font.Bold = True
+            resultRow = resultRow + 1
 
         ' Таблица генераторов
         On Error Resume Next
