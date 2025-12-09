@@ -226,57 +226,32 @@ End Sub
 Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     ' Параметры двоичного поиска
     Dim tMin: tMin = 0.0
-    Dim tMax: tMax = 1000.0  ' Максимальное время отключения КЗ (мс)
-    Dim epsilon: epsilon = 10.0  ' Точность поиска
+    Dim tMax: tMax = 1000.0
+    Dim epsilon: epsilon = 10.0
     Dim tCritical: tCritical = -1
-    Dim maxIterations: maxIterations = 50  ' Защита от бесконечного цикла
+    Dim maxIterations: maxIterations = 50
     Dim iteration: iteration = 0
 
-    ' Восстанавливаем мощность генераторов для текущего уровня мощности
+    ' Восстанавливаем мощность генераторов
     For idx = 0 To UBound(selectedGenIndices)
         genIdx = selectedGenIndices(idx)
         colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
     Next
-    
-    ' Пересчитываем режим
+
     If SolveUR() <> 0 Then
         BinarySearchCriticalTime = -1
         Exit Function
     End If
-    
-    ' Проверяем устойчивость при максимальном времени отключения
-    Call SetShortCircuitClearingTime(tMax)
-    dynRes = spFWDynamic.Run()
-    If dynRes <> 0 Then
-        BinarySearchCriticalTime = -1
-        Exit Function
-    End If
-    
-    Dim maxDelta: maxDelta = GetMaxDelta()
-    Dim stableAtMax: stableAtMax = (maxDelta <= 180)
-    Dim statusMax
-    If stableAtMax Then
-        statusMax = "устойчив"
-    Else
-        statusMax = "нарушен"
-    End If
-    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, statusMax, dynRes, lastSnapIdx)
-    
-    ' Если при максимальном времени устойчивость сохранена, критическое время >= максимальное
-    If stableAtMax Then
-        BinarySearchCriticalTime = tMax
-        Exit Function
-    End If
-    
-    ' Проверяем устойчивость при минимальном времени отключения
+
+    ' Проверка при tMin (быстрое отключение - должно быть НЕУСТОЙЧИВО)
     Call SetShortCircuitClearingTime(tMin)
     dynRes = spFWDynamic.Run()
     If dynRes <> 0 Then
         BinarySearchCriticalTime = -1
         Exit Function
     End If
-    
-    maxDelta = GetMaxDelta()
+
+    Dim maxDelta: maxDelta = GetMaxDelta()
     Dim unstableAtMin: unstableAtMin = (maxDelta > 180)
     Dim statusMin
     If unstableAtMin Then
@@ -285,34 +260,73 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
         statusMin = "устойчив"
     End If
     Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDelta, statusMin, dynRes, lastSnapIdx)
-    
-    ' Если даже при минимальном времени устойчивость нарушена, критическое время = 0
-    If unstableAtMin Then
-        BinarySearchCriticalTime = 0.0
+
+    ' Если при минимальном времени система устойчива - что-то не так
+    ' Но продолжаем поиск
+
+    ' Проверка при tMax (медленное отключение - должно быть УСТОЙЧИВО)
+    For idx = 0 To UBound(selectedGenIndices)
+        genIdx = selectedGenIndices(idx)
+        colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
+    Next
+    If SolveUR() <> 0 Then
+        BinarySearchCriticalTime = -1
         Exit Function
     End If
 
-    ' Двоичный поиск: ищем границу между устойчивостью и нарушением
+    Call SetShortCircuitClearingTime(tMax)
+    dynRes = spFWDynamic.Run()
+    If dynRes <> 0 Then
+        BinarySearchCriticalTime = -1
+        Exit Function
+    End If
+
+    maxDelta = GetMaxDelta()
+    Dim stableAtMax: stableAtMax = (maxDelta <= 180)
+    Dim statusMax
+    If stableAtMax Then
+        statusMax = "устойчив"
+    Else
+        statusMax = "нарушен"
+    End If
+    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, statusMax, dynRes, lastSnapIdx)
+
+    ' Если при максимальном времени всё равно нет устойчивости
+    If Not stableAtMax Then
+        BinarySearchCriticalTime = tMax  ' Возвращаем максимум как "не найдено"
+        Exit Function
+    End If
+
+    ' Если при минимальном времени уже устойчиво
+    If Not unstableAtMin Then
+        BinarySearchCriticalTime = tMin
+        Exit Function
+    End If
+
+    ' ДВОИЧНЫЙ ПОИСК: ищем минимальное время, при котором ещё устойчиво
     Do While (tMax - tMin) > epsilon And iteration < maxIterations
         iteration = iteration + 1
         tMid = (tMin + tMax) / 2.0
 
-        ' Пересчитываем режим
+        ' ВАЖНО: Восстанавливаем мощности перед каждым расчётом
+        For idx = 0 To UBound(selectedGenIndices)
+            genIdx = selectedGenIndices(idx)
+            colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
+        Next
+
         If SolveUR() <> 0 Then
             BinarySearchCriticalTime = -1
             Exit Function
         End If
-        
-        ' Устанавливаем время отключения
+
         Call SetShortCircuitClearingTime(tMid)
-        
-        ' Запускаем динамику
+
         dynRes = spFWDynamic.Run()
         If dynRes <> 0 Then
             BinarySearchCriticalTime = -1
             Exit Function
         End If
-        
+
         maxDelta = GetMaxDelta()
         Dim stableNow: stableNow = (maxDelta <= 180)
         Dim statusNow
@@ -322,19 +336,19 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
             statusNow = "нарушен"
         End If
         Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDelta, statusNow, dynRes, lastSnapIdx)
-        
-        ' Проверяем устойчивость
-        If Not stableNow Then
-            ' Устойчивость нарушена - критическое время меньше tMid
+
+        ' ИСПРАВЛЕННАЯ ЛОГИКА:
+        If stableNow Then
+            ' Устойчиво - можем попробовать меньшее время (двигаем верхнюю границу)
             tMax = tMid
         Else
-            ' Устойчивость сохранена - критическое время больше tMid
+            ' Неустойчиво - нужно большее время (двигаем нижнюю границу)
             tMin = tMid
         End If
     Loop
-    
-    ' Критическое время: tMin (максимальное время с устойчивостью)
-    BinarySearchCriticalTime = tMin
+
+    ' Критическое время - это tMax (минимальное время, при котором ещё устойчиво)
+    BinarySearchCriticalTime = tMax
 End Function
 
 ' --- Основная логика ---
