@@ -73,19 +73,7 @@ End Function
 ' Функция установки времени
 Sub SetShortCircuitClearingTime(tClear)
     On Error Resume Next
-    Set tblEvents = Rastr.Tables("DWFAutoActionScn")
-    If Not tblEvents Is Nothing Then
-        Set colType = tblEvents.Cols("Type")
-        Set colOtkl = tblEvents.Cols("Откл")
-        If Not colType Is Nothing And Not colOtkl Is Nothing Then
-            For i = 0 To tblEvents.Size - 1
-                If colType.ZS(i) = "КЗ" Then
-                    colOtkl.Z(i) = tClear
-                    Exit For
-                End If
-            Next
-        End If
-    End If
+    spFWDynamic.TimeClear = tClear
     On Error GoTo 0
 End Sub
 
