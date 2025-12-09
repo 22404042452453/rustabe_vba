@@ -252,7 +252,6 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
 
     ' Проверка при tMin (короткая длительность шунта - должно быть УСТОЙЧИВО)
     Call SetShuntDuration(tMin)
-    spFWDynamic.Reset()
     dynRes = spFWDynamic.Run()
     If dynRes <> 0 Then
         BinarySearchCriticalTime = -1
@@ -286,7 +285,6 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     End If
 
     Call SetShuntDuration(tMax)
-    spFWDynamic.Reset()
     dynRes = spFWDynamic.Run()
     If dynRes <> 0 Then
         BinarySearchCriticalTime = -1
@@ -327,7 +325,6 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
 
         Call SetShuntDuration(tMid)
 
-        spFWDynamic.Reset()
         dynRes = spFWDynamic.Run()
         If dynRes <> 0 Then
             BinarySearchCriticalTime = -1
