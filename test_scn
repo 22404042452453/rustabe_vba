@@ -26,12 +26,19 @@ Sub SetShortCircuitClearingTime(tClear)
                         If colType.ZS(j) = "Шунт Z" Then
                             ' Устанавливаем время отключения КЗ
                             colTimeStart.Z(j) = kzTime + (tClear / 1000.0)
+                            MsgBox "Найдено КЗ в строке " & i & ", Шунт Z в строке " & j & vbCrLf & _
+                                   "Время КЗ: " & kzTime & " с" & vbCrLf & _
+                                   "Новое время Шунт Z: " & colTimeStart.Z(j) & " с"
                             Exit For
                         End If
                     Next
                     Exit For
                 End If
             Next
+            
+            If Not kzFound Then
+                MsgBox "КЗ не найдено в сценарии"
+            End If
         End If
     End If
     
@@ -43,18 +50,7 @@ tInput = InputBox("Введите время отключения КЗ (мс):",
 
 If IsNumeric(tInput) Then
     tClear = CDbl(tInput)
-    
-    ' Устанавливаем время отключения в сценарии
     Call SetShortCircuitClearingTime(tClear)
-    
-    ' Сохраняем только таблицу сценария
-    saveRes = Rastr.Tables("DFWAutoActionScn").Save()
-    
-    If saveRes = 0 Then
-        MsgBox "Время отключения КЗ установлено: " & tClear & " мс" & vbCrLf & "Сценарий сохранен."
-    Else
-        MsgBox "Ошибка сохранения сценария: " & saveRes
-    End If
 Else
     MsgBox "Неверный ввод времени."
 End If
