@@ -16,7 +16,7 @@ Dim resultRow: resultRow = 1
 
 ' --- Rastr таблицы ---
 Set spBranch = Rastr.Tables("vetv")
-Set spNode   = Rastr.Tables("node")
+Set spNode   = Rastr.Tables("Node")
 Set tblGen   = Rastr.Tables("Generator")
 
 If tblGen Is Nothing Then
@@ -80,21 +80,30 @@ Function CheckStabilityViolation()
     Dim maxDelta: maxDelta = 0
     
     For i = 0 To tblGen.Size - 1
+        Plot = Empty
+        npoints = 0
+        
         On Error Resume Next
         Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, 0)
         errNum = Err.Number
-        On Error GoTo 0
-        
         If errNum = 0 And IsArray(Plot) Then
             npoints = UBound(Plot, 1) + 1
-            If npoints > 0 Then
-                For j = 0 To npoints - 1
-                    deltaVal = Plot(j, 0)  ' Delta в первой колонке
+        End If
+        On Error GoTo 0
+        
+        If errNum = 0 And IsArray(Plot) And npoints > 0 Then
+            For j = 0 To npoints - 1
+                On Error Resume Next
+                deltaVal = Plot(j, 0)  ' Delta в первой колонке
+                If Err.Number = 0 Then
                     If Abs(deltaVal) > maxDelta Then
                         maxDelta = Abs(deltaVal)
                     End If
-                Next
-            End If
+                Else
+                    Err.Clear
+                End If
+                On Error GoTo 0
+            Next
         End If
     Next
     
