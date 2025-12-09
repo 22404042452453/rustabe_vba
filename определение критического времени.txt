@@ -11,12 +11,14 @@ Set wsData = wb.Worksheets(1)
 wsData.Name = "Данные"
 Set wsResult = wb.Worksheets.Add
 wsResult.Name = "Результаты"
+Set wsLog = wb.Worksheets.Add
+wsLog.Name = "Логи"
 
 Dim resultRow: resultRow = 1
 
 ' --- Rastr таблицы ---
 Set spBranch = Rastr.Tables("vetv")
-Set spNode   = Rastr.Tables("Node")
+Set spNode   = Rastr.Tables("node")
 Set tblGen   = Rastr.Tables("Generator")
 
 If tblGen Is Nothing Then
@@ -26,8 +28,9 @@ End If
 
 ' --- Получение колонок ---
 Set colGenName = tblGen.Cols("Name")
-Set colGenNy   = tblGen.Cols("ny")
+Set colGenNy   = tblGen.Cols("Node")
 Set colGenSel  = tblGen.Cols("sel")
+Set colGenPgSet = tblGen.Cols("pg_set")
 
 If colGenName Is Nothing Or colGenNy Is Nothing Then
     MsgBox "Ошибка: Не найдены необходимые колонки в таблице Generator!", vbCritical, "Ошибка"
@@ -45,6 +48,16 @@ If Err.Number <> 0 Then
     MsgBox "Добавлено поле sel в таблицу Generator. Выберите генераторы и запустите скрипт повторно.", vbInformation, "Подготовка"
     WScript.Quit
 End If
+Err.Clear
+' Проверка/создание поля pg_set для базовой мощности (МВт)
+Set colGenPgSet = tblGen.Cols("pg_set")
+If Err.Number <> 0 Then
+    tblGen.Cols.Add "pg_set", PR_FLOAT
+    tblGen.Cols("pg_set").Prop(FL_ZAG) = "Pg задано"
+    Set colGenPgSet = tblGen.Cols("pg_set")
+    MsgBox "Добавлено поле pg_set в таблицу Generator. Заполните базовую мощность и запустите скрипт повторно.", vbInformation, "Подготовка"
+    WScript.Quit
+End If
 On Error GoTo 0
 
 ' Получение колонок узлов
@@ -55,6 +68,21 @@ If spNodePg Is Nothing Then
     MsgBox "Ошибка: Не найдена колонка генерации в таблице node (pg)!", vbCritical, "Ошибка"
     WScript.Quit
 End If
+
+' --- Логирование в Excel ---
+Dim logRow: logRow = 1
+Sub LogBinaryStep(powerLevel, phase, iteration, tMin, tMid, tMax, maxDelta, statusText, dynCode)
+    wsLog.Cells(logRow, 1).Value = powerLevel
+    wsLog.Cells(logRow, 2).Value = phase
+    wsLog.Cells(logRow, 3).Value = iteration
+    wsLog.Cells(logRow, 4).Value = tMin
+    wsLog.Cells(logRow, 5).Value = tMid
+    wsLog.Cells(logRow, 6).Value = tMax
+    wsLog.Cells(logRow, 7).Value = maxDelta
+    wsLog.Cells(logRow, 8).Value = statusText
+    wsLog.Cells(logRow, 9).Value = dynCode
+    logRow = logRow + 1
+End Sub
 
 ' --- Получение FWDynamic ---
 Set spFWDynamic = Rastr.FWDynamic
@@ -74,9 +102,8 @@ Function SolveUR()
     SolveUR = Rastr.rgm("p")
 End Function
 
-' --- Функция проверки нарушения устойчивости ---
-Function CheckStabilityViolation()
-    CheckStabilityViolation = False
+' --- Функция получения MaxDelta и проверки устойчивости ---
+Function GetMaxDelta()
     Dim maxDelta: maxDelta = 0
     
     For i = 0 To tblGen.Size - 1
@@ -107,10 +134,11 @@ Function CheckStabilityViolation()
         End If
     Next
     
-    ' Нарушение устойчивости при Delta > 180 градусов
-    If maxDelta > 180 Then
-        CheckStabilityViolation = True
-    End If
+    GetMaxDelta = maxDelta
+End Function
+
+Function CheckStabilityViolation()
+    CheckStabilityViolation = (GetMaxDelta() > 180)
 End Function
 
 ' --- Функция установки времени отключения КЗ ---
@@ -160,7 +188,9 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
         Exit Function
     End If
     
-    Dim stableAtMax: stableAtMax = Not CheckStabilityViolation()
+    Dim maxDelta: maxDelta = GetMaxDelta()
+    Dim stableAtMax: stableAtMax = (maxDelta <= 180)
+    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, IIf(stableAtMax, "устойчив", "нарушен"), dynRes)
     
     ' Если при максимальном времени устойчивость сохранена, критическое время >= максимальное
     If stableAtMax Then
@@ -176,7 +206,9 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
         Exit Function
     End If
     
-    Dim unstableAtMin: unstableAtMin = CheckStabilityViolation()
+    maxDelta = GetMaxDelta()
+    Dim unstableAtMin: unstableAtMin = (maxDelta > 180)
+    Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDelta, IIf(unstableAtMin, "нарушен", "устойчив"), dynRes)
     
     ' Если даже при минимальном времени устойчивость нарушена, критическое время = 0
     If unstableAtMin Then
@@ -211,8 +243,12 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
             Exit Function
         End If
         
+        maxDelta = GetMaxDelta()
+        Dim stableNow: stableNow = (maxDelta <= 180)
+        Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDelta, IIf(stableNow, "устойчив", "нарушен"), dynRes)
+        
         ' Проверяем устойчивость
-        If CheckStabilityViolation() Then
+        If Not stableNow Then
             ' Устойчивость нарушена - критическое время меньше tMid
             tMax = tMid
         Else
@@ -229,13 +265,15 @@ End Function
 
 ' --- Основная логика ---
 
-' 1. Получаем список выбранных генераторов
+' 1. Получаем список выбранных генераторов и базовую мощность
 Dim selectedGenIndices()
 Dim selectedNodeIndices()
 Dim originalGenValues()
+Dim basePgValues()
 ReDim selectedGenIndices(-1)
 ReDim selectedNodeIndices(-1)
 ReDim originalGenValues(-1)
+ReDim basePgValues(-1)
 
 tblGen.SetSel("sel")
 genIdx = tblGen.FindNextSel(-1)
@@ -262,6 +300,14 @@ While genIdx >= 0
         ' Сохраняем исходное значение генерации
         ReDim Preserve originalGenValues(UBound(originalGenValues) + 1)
         originalGenValues(UBound(originalGenValues)) = spNodePg.Z(nodeIdx)
+        
+        ' Базовая мощность: из pg_set если задана, иначе текущая pg
+        ReDim Preserve basePgValues(UBound(basePgValues) + 1)
+        If Not IsEmpty(colGenPgSet.Z(genIdx)) And Not IsNull(colGenPgSet.Z(genIdx)) Then
+            basePgValues(UBound(basePgValues)) = CDbl(colGenPgSet.Z(genIdx))
+        Else
+            basePgValues(UBound(basePgValues)) = spNodePg.Z(nodeIdx)
+        End If
     End If
     
     genIdx = tblGen.FindNextSel(genIdx)
@@ -279,6 +325,19 @@ wsResult.Cells(resultRow, 3).Value = "Статус"
 wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 3)).Font.Bold = True
 resultRow = resultRow + 1
 
+' Заголовок логов
+wsLog.Cells(1, 1).Value = "Мощность %"
+wsLog.Cells(1, 2).Value = "Фаза"
+wsLog.Cells(1, 3).Value = "Итерация"
+wsLog.Cells(1, 4).Value = "t_min"
+wsLog.Cells(1, 5).Value = "t_mid"
+wsLog.Cells(1, 6).Value = "t_max"
+wsLog.Cells(1, 7).Value = "MaxDelta"
+wsLog.Cells(1, 8).Value = "Статус"
+wsLog.Cells(1, 9).Value = "DynCode"
+wsLog.Rows(1).Font.Bold = True
+logRow = 2
+
 ' 3. Цикл по уровням мощности (60%, 70%, 80%, 90%, 100%)
 Dim powerLevels(4)
 powerLevels(0) = 60
@@ -293,7 +352,7 @@ For pIdx = 0 To UBound(powerLevels)
     ' Устанавливаем генерацию для текущего уровня мощности
     For idx = 0 To UBound(selectedNodeIndices)
         nodeIdx = selectedNodeIndices(idx)
-        spNodePg.Z(nodeIdx) = originalGenValues(idx) * powerLevel / 100.0
+        spNodePg.Z(nodeIdx) = basePgValues(idx) * powerLevel / 100.0
     Next
     
     ' Пересчитываем установившийся режим
@@ -302,8 +361,11 @@ For pIdx = 0 To UBound(powerLevels)
         ' Запускаем динамику с исходным временем отключения КЗ
         dynRes = spFWDynamic.Run()
         If dynRes = 0 Then
-            ' Проверяем нарушение устойчивости
-            If CheckStabilityViolation() Then
+            maxDelta = GetMaxDelta()
+            stableNow = (maxDelta <= 180)
+            Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, IIf(stableNow, "устойчив", "нарушен"), dynRes)
+            
+            If Not stableNow Then
                 ' Нарушение устойчивости - используем двоичный поиск
                 tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedNodeIndices)
                 
@@ -326,11 +388,13 @@ For pIdx = 0 To UBound(powerLevels)
             wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
             wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта динамики"
             wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & dynRes & ")"
+            Call LogBinaryStep(powerLevel, "base_dyn_err", "", "", "", "", "", "dyn_err", dynRes)
         End If
     Else
         wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
         wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта УР"
         wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & urRes & ")"
+        Call LogBinaryStep(powerLevel, "base_ur_err", "", "", "", "", "", "ur_err", urRes)
     End If
     
     resultRow = resultRow + 1
