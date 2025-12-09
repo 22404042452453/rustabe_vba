@@ -30,7 +30,8 @@ End If
 Set colGenName = tblGen.Cols("Name")
 Set colGenNy   = tblGen.Cols("Node")
 Set colGenSel  = tblGen.Cols("sel")
-Set colGenP    = tblGen.Cols("P") ' Базовая мощность генератора (100%)
+Set colGenP    = tblGen.Cols("P") ' Текущая мощность генератора
+Set colGenPnom = tblGen.Cols("Pnom") ' Номинальная мощность генератора (100%)
 
 If colGenName Is Nothing Or colGenNy Is Nothing Or colGenP Is Nothing Then
     MsgBox "Ошибка: Не найдены необходимые колонки в таблице Generator (Name/Node/P)!", vbCritical, "Ошибка"
@@ -181,7 +182,7 @@ Sub SetShortCircuitClearingTime(tClear)
 End Sub
 
 ' --- Функция двоичного поиска критического времени отключения КЗ ---
-Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
+Function BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndices)
     ' Параметры двоичного поиска
     Dim tMin: tMin = 0.0
     Dim tMax: tMax = 1.0  ' Максимальное время отключения КЗ (сек)
@@ -189,11 +190,11 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
     Dim tCritical: tCritical = -1
     Dim maxIterations: maxIterations = 50  ' Защита от бесконечного цикла
     Dim iteration: iteration = 0
-    
-    ' Восстанавливаем генерацию для текущего уровня мощности
-    For idx = 0 To UBound(nodeIndices)
-        nodeIdx = nodeIndices(idx)
-        spNodePg.Z(nodeIdx) = originalGenValues(idx) * powerLevel / 100.0
+
+    ' Восстанавливаем мощность генераторов для текущего уровня мощности
+    For idx = 0 To UBound(selectedGenIndices)
+        genIdx = selectedGenIndices(idx)
+        colGenP.Z(genIdx) = originalGenValues(idx) * powerLevel / 100.0
     Next
     
     ' Пересчитываем режим
@@ -255,10 +256,10 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
         iteration = iteration + 1
         tMid = (tMin + tMax) / 2.0
         
-        ' Восстанавливаем генерацию
-        For idx = 0 To UBound(nodeIndices)
-            nodeIdx = nodeIndices(idx)
-            spNodePg.Z(nodeIdx) = originalGenValues(idx) * powerLevel / 100.0
+        ' Восстанавливаем мощность генераторов
+        For idx = 0 To UBound(selectedGenIndices)
+            genIdx = selectedGenIndices(idx)
+            colGenP.Z(genIdx) = originalGenValues(idx) * powerLevel / 100.0
         Next
         
         ' Пересчитываем режим
@@ -337,18 +338,18 @@ While genIdx >= 0
         ReDim Preserve selectedNodeIndices(UBound(selectedNodeIndices) + 1)
         selectedNodeIndices(UBound(selectedNodeIndices)) = nodeIdx
         
-        ' Сохраняем исходное значение генерации
+        ' Сохраняем исходное значение текущей мощности генератора
         ReDim Preserve originalGenValues(UBound(originalGenValues) + 1)
-        originalGenValues(UBound(originalGenValues)) = spNodePg.Z(nodeIdx)
-        
-        ' Базовая мощность: из Generator.P (100%). Если пусто/не число, берём текущий pg узла.
+        originalGenValues(UBound(originalGenValues)) = colGenP.Z(genIdx)
+
+        ' Базовая мощность: из Generator.Pnom (100%). Если пусто/не число, берём текущий P генератора.
         ReDim Preserve basePgValues(UBound(basePgValues) + 1)
         Dim pVal
-        pVal = colGenP.Z(genIdx)
+        pVal = colGenPnom.Z(genIdx)
         If IsNumeric(pVal) And Not IsNull(pVal) Then
             basePgValues(UBound(basePgValues)) = CDbl(pVal)
         Else
-            basePgValues(UBound(basePgValues)) = spNodePg.Z(nodeIdx)
+            basePgValues(UBound(basePgValues)) = colGenP.Z(genIdx)
         End If
     End If
     
@@ -401,10 +402,10 @@ Dim maxDelta, stableNow, statusBase
 For pIdx = 0 To UBound(powerLevels)
     powerLevel = powerLevels(pIdx)
     
-    ' Устанавливаем генерацию для текущего уровня мощности
-    For idx = 0 To UBound(selectedNodeIndices)
-        nodeIdx = selectedNodeIndices(idx)
-        spNodePg.Z(nodeIdx) = basePgValues(idx) * powerLevel / 100.0
+    ' Устанавливаем мощность генераторов для текущего уровня мощности
+    For idx = 0 To UBound(selectedGenIndices)
+        genIdx = selectedGenIndices(idx)
+        colGenP.Z(genIdx) = basePgValues(idx) * powerLevel / 100.0
     Next
     
     ' Сбрасываем значение для текущей итерации
@@ -438,7 +439,7 @@ For pIdx = 0 To UBound(powerLevels)
             
             If anyViolation Then
                 ' Нарушение устойчивости - используем двоичный поиск (по системе)
-                tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedNodeIndices)
+                tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndices)
                 If IsNumeric(tCritical) And tCritical >= 0 Then
                     ' ИСПРАВЛЕНИЕ: безопасное преобразование
                     tCriticalForRows = FormatNumber(CDbl(tCritical), 3)
