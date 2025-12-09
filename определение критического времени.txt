@@ -112,7 +112,7 @@ Function GetMaxDelta()
         npoints = 0
 
         ' Пробуем snapIdx от 5 до 0
-        For snapIdx = 500 To 0 Step -1
+        For snapIdx = 5 To 0 Step -1
             On Error Resume Next
             Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
             errNum = Err.Number
@@ -168,7 +168,7 @@ Function GetGenMaxDelta(genIndex)
     wsData.Cells.Clear
 
     ' Пробуем snapIdx от 5 до 0
-    For snapIdx = 5 To 0 Step -1
+    For snapIdx = 500 To 0 Step -1
         On Error Resume Next
         Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, snapIdx)
         errNum = Err.Number
@@ -296,13 +296,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     Do While (tMax - tMin) > epsilon And iteration < maxIterations
         iteration = iteration + 1
         tMid = (tMin + tMax) / 2.0
-        
-        ' Восстанавливаем мощность генераторов
-        For idx = 0 To UBound(selectedGenIndices)
-            genIdx = selectedGenIndices(idx)
-            colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
-        Next
-        
+
         ' Пересчитываем режим
         If SolveUR() <> 0 Then
             BinarySearchCriticalTime = -1
