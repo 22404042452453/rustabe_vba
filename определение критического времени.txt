@@ -131,6 +131,38 @@ Function CheckStabilityViolation()
     CheckStabilityViolation = (GetMaxDelta() > 180)
 End Function
 
+' MaxDelta для конкретного генератора
+Function GetGenMaxDelta(genIndex)
+    Dim maxDelta: maxDelta = 0
+    Plot = Empty
+    npoints = 0
+    
+    On Error Resume Next
+    Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, 0)
+    errNum = Err.Number
+    If errNum = 0 And IsArray(Plot) Then
+        npoints = UBound(Plot, 1) + 1
+    End If
+    On Error GoTo 0
+    
+    If errNum = 0 And IsArray(Plot) And npoints > 0 Then
+        For j = 0 To npoints - 1
+            On Error Resume Next
+            deltaVal = Plot(j, 0)
+            If Err.Number = 0 Then
+                If Abs(deltaVal) > maxDelta Then
+                    maxDelta = Abs(deltaVal)
+                End If
+            Else
+                Err.Clear
+            End If
+            On Error GoTo 0
+        Next
+    End If
+    
+    GetGenMaxDelta = maxDelta
+End Function
+
 ' --- Функция установки времени отключения КЗ ---
 ' Примечание: механизм изменения времени отключения КЗ может отличаться
 ' в зависимости от версии Rastr и структуры сценария
@@ -309,9 +341,15 @@ While genIdx >= 0
         ReDim Preserve originalGenValues(UBound(originalGenValues) + 1)
         originalGenValues(UBound(originalGenValues)) = spNodePg.Z(nodeIdx)
         
-        ' Базовая мощность: из Generator.P (100%)
+        ' Базовая мощность: из Generator.P (100%). Если пусто/не число, берём текущий pg узла.
         ReDim Preserve basePgValues(UBound(basePgValues) + 1)
-        basePgValues(UBound(basePgValues)) = CDbl(colGenP.Z(genIdx))
+        Dim pVal
+        pVal = colGenP.Z(genIdx)
+        If IsNumeric(pVal) And Not IsNull(pVal) Then
+            basePgValues(UBound(basePgValues)) = CDbl(pVal)
+        Else
+            basePgValues(UBound(basePgValues)) = spNodePg.Z(nodeIdx)
+        End If
     End If
     
     genIdx = tblGen.FindNextSel(genIdx)
@@ -324,9 +362,11 @@ End If
 
 ' 2. Заголовок таблицы результатов
 wsResult.Cells(resultRow, 1).Value = "Уровень мощности (%)"
-wsResult.Cells(resultRow, 2).Value = "Критическое время отключения КЗ (сек)"
-wsResult.Cells(resultRow, 3).Value = "Статус"
-wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 3)).Font.Bold = True
+wsResult.Cells(resultRow, 2).Value = "Генератор"
+wsResult.Cells(resultRow, 3).Value = "Max Delta"
+wsResult.Cells(resultRow, 4).Value = "Статус"
+wsResult.Cells(resultRow, 5).Value = "Критическое время отключения КЗ (сек)"
+wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 5)).Font.Bold = True
 resultRow = resultRow + 1
 
 ' Заголовок логов
@@ -359,12 +399,26 @@ For pIdx = 0 To UBound(powerLevels)
         spNodePg.Z(nodeIdx) = basePgValues(idx) * powerLevel / 100.0
     Next
     
+    Dim tCriticalForRows
+    tCriticalForRows = ""
+    
     ' Пересчитываем установившийся режим
     urRes = SolveUR()
     If urRes = 0 Then
         ' Запускаем динамику с исходным временем отключения КЗ
         dynRes = spFWDynamic.Run()
         If dynRes = 0 Then
+            ' Пер-генераторные MaxDelta
+            Dim genMaxDeltas()
+            ReDim genMaxDeltas(UBound(selectedGenIndices))
+            Dim anyViolation: anyViolation = False
+            For g = 0 To UBound(selectedGenIndices)
+                genIdx = selectedGenIndices(g)
+                genMaxDeltas(g) = GetGenMaxDelta(genIdx)
+                If genMaxDeltas(g) > 180 Then anyViolation = True
+            Next
+            
+            ' Системный максимум для лога/бинарного поиска
             maxDelta = GetMaxDelta()
             stableNow = (maxDelta <= 180)
             Dim statusBase
@@ -375,39 +429,51 @@ For pIdx = 0 To UBound(powerLevels)
             End If
             Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, statusBase, dynRes)
             
-            If Not stableNow Then
-                ' Нарушение устойчивости - используем двоичный поиск
+            If anyViolation Then
+                ' Нарушение устойчивости - используем двоичный поиск (по системе)
                 tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedNodeIndices)
-                
                 If tCritical >= 0 Then
-                    wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-                    wsResult.Cells(resultRow, 2).Value = FormatNumber(tCritical, 3)
-                    wsResult.Cells(resultRow, 3).Value = "Нарушение устойчивости"
+                    tCriticalForRows = FormatNumber(tCritical, 3)
                 Else
-                    wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-                    wsResult.Cells(resultRow, 2).Value = "Ошибка поиска"
-                    wsResult.Cells(resultRow, 3).Value = "Ошибка определения критического времени"
+                    tCriticalForRows = "Ошибка поиска"
                 End If
             Else
-                ' Устойчивость сохранена - критическое время = максимальное (или не определено)
-                wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-                wsResult.Cells(resultRow, 2).Value = "> 1.0"  ' Или максимальное время
-                wsResult.Cells(resultRow, 3).Value = "Устойчивость сохранена"
+                tCriticalForRows = "> 1.0"
             End If
+            
+            ' Записываем по каждому генератору
+            For g = 0 To UBound(selectedGenIndices)
+                genIdx = selectedGenIndices(g)
+                genName = colGenName.ZS(genIdx)
+                wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+                wsResult.Cells(resultRow, 2).Value = genName
+                wsResult.Cells(resultRow, 3).Value = FormatNumber(genMaxDeltas(g), 3)
+                If genMaxDeltas(g) > 180 Then
+                    wsResult.Cells(resultRow, 4).Value = "Нарушение устойчивости"
+                Else
+                    wsResult.Cells(resultRow, 4).Value = "Устойчивость сохранена"
+                End If
+                wsResult.Cells(resultRow, 5).Value = tCriticalForRows
+                resultRow = resultRow + 1
+            Next
         Else
             wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-            wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта динамики"
-            wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & dynRes & ")"
+            wsResult.Cells(resultRow, 2).Value = ""
+            wsResult.Cells(resultRow, 3).Value = ""
+            wsResult.Cells(resultRow, 4).Value = "Ошибка расчёта динамики"
+            wsResult.Cells(resultRow, 5).Value = "Ошибка (код " & dynRes & ")"
             Call LogBinaryStep(powerLevel, "base_dyn_err", "", "", "", "", "", CStr("dyn_err"), dynRes)
+            resultRow = resultRow + 1
         End If
     Else
         wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-        wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта УР"
-        wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & urRes & ")"
+        wsResult.Cells(resultRow, 2).Value = ""
+        wsResult.Cells(resultRow, 3).Value = ""
+        wsResult.Cells(resultRow, 4).Value = "Ошибка расчёта УР"
+        wsResult.Cells(resultRow, 5).Value = "Ошибка (код " & urRes & ")"
         Call LogBinaryStep(powerLevel, "base_ur_err", "", "", "", "", "", CStr("ur_err"), urRes)
+        resultRow = resultRow + 1
     End If
-    
-    resultRow = resultRow + 1
 Next
 
 ' Восстанавливаем исходные значения генерации
