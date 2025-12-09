@@ -1,22 +1,35 @@
-' Скрипт для изменения длительности КЗ в сценарии и сохранения
+' Скрипт для изменения времени отключения КЗ в сценарии
 
-' Функция установки длительности КЗ
-Sub SetShortCircuitDuration(tClear)
+' Функция установки времени отключения КЗ
+Sub SetShortCircuitClearingTime(tClear)
     On Error Resume Next
     
     Set tblEvents = Rastr.Tables("DFWAutoActionScn")
     
     If Not tblEvents Is Nothing Then
         Set colType = tblEvents.Cols("Type")
-        Set colDT = tblEvents.Cols("DT")  ' Длительность действия
+        Set colTimeStart = tblEvents.Cols("TimeStart")
         
-        If Not colType Is Nothing And Not colDT Is Nothing Then
+        If Not colType Is Nothing And Not colTimeStart Is Nothing Then
+            Dim kzTime
+            Dim kzFound
+            kzFound = False
+            
+            ' Ищем КЗ и запоминаем его время начала
             For i = 0 To tblEvents.Size - 1
-                ' Ищем действие типа "КЗ"
                 If colType.ZS(i) = "КЗ" Then
-                    ' Устанавливаем длительность КЗ в мс
-                    colDT.Z(i) = tClear
-                    Exit For  ' Обрабатываем только первое КЗ
+                    kzTime = colTimeStart.Z(i)
+                    kzFound = True
+                    
+                    ' Ищем следующий "Шунт Z" после этого КЗ
+                    For j = i + 1 To tblEvents.Size - 1
+                        If colType.ZS(j) = "Шунт Z" Then
+                            ' Устанавливаем время отключения КЗ
+                            colTimeStart.Z(j) = kzTime + (tClear / 1000.0)
+                            Exit For
+                        End If
+                    Next
+                    Exit For
                 End If
             Next
         End If
@@ -26,19 +39,19 @@ Sub SetShortCircuitDuration(tClear)
 End Sub
 
 ' Основная логика
-tInput = InputBox("Введите длительность КЗ (мс):", "Изменение времени", "500")
+tInput = InputBox("Введите время отключения КЗ (мс):", "Изменение времени", "500")
 
 If IsNumeric(tInput) Then
     tClear = CDbl(tInput)
     
-    ' Устанавливаем длительность в сценарии
-    Call SetShortCircuitDuration(tClear)
+    ' Устанавливаем время отключения в сценарии
+    Call SetShortCircuitClearingTime(tClear)
     
     ' Сохраняем только таблицу сценария
     saveRes = Rastr.Tables("DFWAutoActionScn").Save()
     
     If saveRes = 0 Then
-        MsgBox "Длительность КЗ установлена: " & tClear & " мс" & vbCrLf & "Сценарий сохранен."
+        MsgBox "Время отключения КЗ установлено: " & tClear & " мс" & vbCrLf & "Сценарий сохранен."
     Else
         MsgBox "Ошибка сохранения сценария: " & saveRes
     End If
