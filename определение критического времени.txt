@@ -101,11 +101,16 @@ End Function
 Function GetMaxDelta()
     Dim maxDelta: maxDelta = 0
     lastSnapIdx = -1
-    
+
+    ' Очищаем wsData
+    wsData.Cells.Clear
+
+    Dim dataCol: dataCol = 1
+
     For i = 0 To tblGen.Size - 1
         Plot = Empty
         npoints = 0
-        
+
         ' Пробуем snapIdx от 5 до 0
         For snapIdx = 5 To 0 Step -1
             On Error Resume Next
@@ -120,23 +125,32 @@ Function GetMaxDelta()
             End If
             On Error GoTo 0
         Next
-        
+
         If errNum = 0 And IsArray(Plot) And npoints > 0 Then
-            For j = 0 To npoints - 1
-                On Error Resume Next
-                deltaVal = Plot(j, 0)  ' Delta в первой колонке
-                If Err.Number = 0 Then
-                    If Abs(deltaVal) > maxDelta Then
-                        maxDelta = Abs(deltaVal)
-                    End If
-                Else
-                    Err.Clear
-                End If
-                On Error GoTo 0
-            Next
+            ' Записываем Plot в wsData
+            wsData.Cells(2, dataCol).Resize(npoints, 2).Value = Plot
+
+            ' Диапазон для Delta
+            deltaStartAddr = wsData.Cells(2, dataCol).Address(False, False, 1, True)
+            deltaEndAddr = wsData.Cells(npoints + 1, dataCol).Address(False, False, 1, True)
+            deltaRange = deltaStartAddr & ":" & deltaEndAddr
+
+            ' Формула MAX
+            wsData.Cells(2, dataCol + 2).Formula = "=MAX(" & deltaRange & ")"
+
+            ' Рассчитываем
+            xl.Calculate
+
+            ' Получаем max для этого генератора
+            maxGen = Abs(wsData.Cells(2, dataCol + 2).Value)
+            If maxGen > maxDelta Then
+                maxDelta = maxGen
+            End If
+
+            dataCol = dataCol + 3
         End If
     Next
-    
+
     GetMaxDelta = maxDelta
 End Function
 
@@ -149,7 +163,10 @@ Function GetGenMaxDelta(genIndex)
     Dim maxDelta: maxDelta = 0
     Plot = Empty
     npoints = 0
-    
+
+    ' Очищаем wsData
+    wsData.Cells.Clear
+
     ' Пробуем snapIdx от 5 до 0
     For snapIdx = 5 To 0 Step -1
         On Error Resume Next
@@ -163,22 +180,26 @@ Function GetGenMaxDelta(genIndex)
         End If
         On Error GoTo 0
     Next
-    
+
     If errNum = 0 And IsArray(Plot) And npoints > 0 Then
-        For j = 0 To npoints - 1
-            On Error Resume Next
-            deltaVal = Plot(j, 0)
-            If Err.Number = 0 Then
-                If Abs(deltaVal) > maxDelta Then
-                    maxDelta = Abs(deltaVal)
-                End If
-            Else
-                Err.Clear
-            End If
-            On Error GoTo 0
-        Next
+        ' Записываем Plot в wsData
+        wsData.Cells(2, 1).Resize(npoints, 2).Value = Plot
+
+        ' Диапазон для Delta
+        deltaStartAddr = wsData.Cells(2, 1).Address(False, False, 1, True)
+        deltaEndAddr = wsData.Cells(npoints + 1, 1).Address(False, False, 1, True)
+        deltaRange = deltaStartAddr & ":" & deltaEndAddr
+
+        ' Формула MAX
+        wsData.Cells(2, 3).Formula = "=MAX(" & deltaRange & ")"
+
+        ' Рассчитываем
+        xl.Calculate
+
+        ' Получаем max
+        maxDelta = Abs(wsData.Cells(2, 3).Value)
     End If
-    
+
     GetGenMaxDelta = maxDelta
 End Function
 
