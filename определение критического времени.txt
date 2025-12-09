@@ -216,18 +216,13 @@ Sub SetShuntDuration(tClear)
 
         If Not colType Is Nothing And Not colDT Is Nothing Then
             ' Ищем действие типа "Объект" с названием, содержащим "Шунт Z"
-            Dim found: found = False
             For i = 0 To tblEvents.Size - 1
                 If colType.ZS(i) = "Объект" And InStr(colName.ZS(i), "Шунт Z") > 0 Then
-                    MsgBox "Найдено действие: " & colName.ZS(i) & ", текущее DT: " & colDT.Z(i)
                     ' Устанавливаем длительность в мс
                     colDT.Z(i) = tClear
-                    MsgBox "Установлено DT = " & tClear
-                    found = True
                     Exit For
                 End If
             Next
-            If Not found Then MsgBox "Действие 'Шунт Z' не найдено!"
         End If
     End If
 
@@ -257,6 +252,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
 
     ' Проверка при tMin (короткая длительность шунта - должно быть УСТОЙЧИВО)
     Call SetShuntDuration(tMin)
+    spFWDynamic.Reset()
     dynRes = spFWDynamic.Run()
     If dynRes <> 0 Then
         BinarySearchCriticalTime = -1
@@ -290,6 +286,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     End If
 
     Call SetShuntDuration(tMax)
+    spFWDynamic.Reset()
     dynRes = spFWDynamic.Run()
     If dynRes <> 0 Then
         BinarySearchCriticalTime = -1
@@ -330,6 +327,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
 
         Call SetShuntDuration(tMid)
 
+        spFWDynamic.Reset()
         dynRes = spFWDynamic.Run()
         If dynRes <> 0 Then
             BinarySearchCriticalTime = -1
