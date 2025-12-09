@@ -253,7 +253,16 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
 
     ' ===== ФАЗА 1: Проверка при tMin (должно быть УСТОЙЧИВО) =====
     Call SetShuntDuration(tMin)
+    On Error Resume Next
     dynRes = spFWDynamic.Run()
+    If Err.Number <> 0 Then
+        dynRes = -999
+        Call LogBinaryStep(powerLevel, "min_dyn_error", "", tMin, "", tMax, "", "Ошибка динамики: " & Err.Description, dynRes, -1)
+        On Error GoTo 0
+        BinarySearchCriticalTime = -1
+        Exit Function
+    End If
+    On Error GoTo 0
     If dynRes <> 0 Then
         BinarySearchCriticalTime = -1
         Call LogBinaryStep(powerLevel, "min_dyn_error", "", tMin, "", tMax, "", "Ошибка динамики", dynRes, -1)
@@ -291,7 +300,16 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     End If
 
     Call SetShuntDuration(tMax)
+    On Error Resume Next
     dynRes = spFWDynamic.Run()
+    If Err.Number <> 0 Then
+        dynRes = -999
+        Call LogBinaryStep(powerLevel, "max_dyn_error", "", tMin, "", tMax, "", "Ошибка динамики: " & Err.Description, dynRes, -1)
+        On Error GoTo 0
+        BinarySearchCriticalTime = -1
+        Exit Function
+    End If
+    On Error GoTo 0
     If dynRes <> 0 Then
         BinarySearchCriticalTime = -1
         Call LogBinaryStep(powerLevel, "max_dyn_error", "", tMin, "", tMax, "", "Ошибка динамики", dynRes, -1)
@@ -335,7 +353,16 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
 
         Call SetShuntDuration(tMid)
 
+        On Error Resume Next
         dynRes = spFWDynamic.Run()
+        If Err.Number <> 0 Then
+            dynRes = -999
+            Call LogBinaryStep(powerLevel, "binary_dyn_error", iteration, tMin, tMid, tMax, "", "Ошибка динамики: " & Err.Description, dynRes, -1)
+            On Error GoTo 0
+            BinarySearchCriticalTime = -1
+            Exit Function
+        End If
+        On Error GoTo 0
         If dynRes <> 0 Then
             BinarySearchCriticalTime = -1
             Call LogBinaryStep(powerLevel, "binary_dyn_error", iteration, tMin, tMid, tMax, "", "Ошибка динамики", dynRes, -1)
@@ -490,8 +517,21 @@ For pIdx = 0 To UBound(powerLevels)
     urRes = SolveUR()
     If urRes = 0 Then
         ' Запускаем динамику с исходным временем отключения КЗ
+        On Error Resume Next
         dynRes = spFWDynamic.Run()
-        If dynRes = 0 Then
+        If Err.Number <> 0 Then
+            dynRes = -999
+            Call LogBinaryStep(powerLevel, "base_dyn_err", "", "", "", "", "", "Ошибка динамики: " & Err.Description, dynRes, -1)
+            On Error GoTo 0
+            wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+            wsResult.Cells(resultRow, 2).Value = ""
+            wsResult.Cells(resultRow, 3).Value = ""
+            wsResult.Cells(resultRow, 4).Value = "Ошибка расчёта динамики (исключение)"
+            wsResult.Cells(resultRow, 5).Value = "Ошибка (исключение)"
+            resultRow = resultRow + 1
+        Else
+            On Error GoTo 0
+            If dynRes = 0 Then
             ' Пер-генераторные MaxDelta - пересоздаём массив для текущей итерации
             ReDim genMaxDeltas(UBound(selectedGenIndices))
             anyViolation = False
