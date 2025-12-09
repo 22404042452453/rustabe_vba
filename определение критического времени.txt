@@ -215,24 +215,23 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     Dim tCritical: tCritical = -1
     Dim maxIterations: maxIterations = 50
     Dim iteration: iteration = 0
-    
-    ' Подготовка массива текущих мощностей
-    Dim currentPowers()
-    ReDim currentPowers(UBound(selectedGenIndices))
+
+    ' Восстанавливаем мощность генераторов
     For idx = 0 To UBound(selectedGenIndices)
-        currentPowers(idx) = baseGenValues(idx) * powerLevel / 100.0
+        genIdx = selectedGenIndices(idx)
+        colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
     Next
-    
-    ' ===== ФАЗА 1: Проверка tMin (должно быть УСТОЙЧИВО) =====
-    If RestoreSteadyState(selectedGenIndices, currentPowers) <> 0 Then
+
+    If SolveUR() <> 0 Then
         BinarySearchCriticalTime = -1
-        Call LogBinaryStep(powerLevel, "min_ur_error", "", tMin, "", tMax, "", "Ошибка УР", -1, -1)
+        Call LogBinaryStep(powerLevel, "init_ur_error", "", "", "", "", "", "Ошибка УР", -1, -1)
         Exit Function
     End If
-    
+
+    ' ===== ФАЗА 1: Проверка tMin (должно быть УСТОЙЧИВО) =====
     Call SetShuntDuration(tMin)
     dynRes = spFWDynamic.Run()
-    
+
     If dynRes <> 0 Then
         BinarySearchCriticalTime = -1
         Call LogBinaryStep(powerLevel, "min_dyn_error", "", tMin, "", tMax, "", "Ошибка динамики", dynRes, -1)
@@ -252,7 +251,13 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     End If
     
     ' ===== ФАЗА 2: Проверка tMax (должно быть НЕУСТОЙЧИВО) =====
-    If RestoreSteadyState(selectedGenIndices, currentPowers) <> 0 Then
+    ' ВАЖНО: Восстанавливаем мощности перед каждым расчетом
+    For idx = 0 To UBound(selectedGenIndices)
+        genIdx = selectedGenIndices(idx)
+        colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
+    Next
+
+    If SolveUR() <> 0 Then
         BinarySearchCriticalTime = -1
         Call LogBinaryStep(powerLevel, "max_ur_error", "", tMin, "", tMax, "", "Ошибка УР", -1, -1)
         Exit Function
@@ -284,8 +289,13 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
         iteration = iteration + 1
         tMid = (tMin + tMax) / 2.0
         
-        ' КРИТИЧЕСКИ ВАЖНО: Восстанавливаем УР перед КАЖДЫМ расчётом
-        If RestoreSteadyState(selectedGenIndices, currentPowers) <> 0 Then
+        ' КРИТИЧЕСКИ ВАЖНО: Восстанавливаем мощности перед каждым расчётом
+        For idx = 0 To UBound(selectedGenIndices)
+            genIdx = selectedGenIndices(idx)
+            colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
+        Next
+
+        If SolveUR() <> 0 Then
             BinarySearchCriticalTime = -1
             Call LogBinaryStep(powerLevel, "binary_ur_error", iteration, tMin, tMid, tMax, "", "Ошибка УР", -1, -1)
             Exit Function
@@ -469,7 +479,7 @@ For pIdx = 0 To UBound(powerLevels)
             wsResult.Cells(resultRow, 3).Value = ""
             wsResult.Cells(resultRow, 4).Value = "Ошибка расчёта динамики"
             wsResult.Cells(resultRow, 5).Value = "Ошибка (код " & dynRes & ")"
-            Call LogBinaryStep(powerLevel, "base_dyn_err", "", "", "", "", "", "dyn_err", dynRes, -1)
+            Call LogBinaryStep(powerLevel, "base_dyn_err", "", "", "", "", "", CStr("dyn_err"), dynRes, -1)
             resultRow = resultRow + 1
         End If
     Else
@@ -478,7 +488,7 @@ For pIdx = 0 To UBound(powerLevels)
         wsResult.Cells(resultRow, 3).Value = ""
         wsResult.Cells(resultRow, 4).Value = "Ошибка расчёта УР"
         wsResult.Cells(resultRow, 5).Value = "Ошибка (код " & urRes & ")"
-        Call LogBinaryStep(powerLevel, "base_ur_err", "", "", "", "", "", "ur_err", urRes, -1)
+        Call LogBinaryStep(powerLevel, "base_ur_err", "", "", "", "", "", CStr("ur_err"), urRes, -1)
         resultRow = resultRow + 1
     End If
 Next
