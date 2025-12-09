@@ -399,8 +399,8 @@ For pIdx = 0 To UBound(powerLevels)
         spNodePg.Z(nodeIdx) = basePgValues(idx) * powerLevel / 100.0
     Next
     
-    Dim tCriticalForRows
-    tCriticalForRows = ""
+    ' ИСПРАВЛЕНИЕ: явно объявляем переменную как String
+    Dim tCriticalForRows: tCriticalForRows = ""
     
     ' Пересчитываем установившийся режим
     urRes = SolveUR()
@@ -433,7 +433,8 @@ For pIdx = 0 To UBound(powerLevels)
                 ' Нарушение устойчивости - используем двоичный поиск (по системе)
                 tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedNodeIndices)
                 If tCritical >= 0 Then
-                    tCriticalForRows = FormatNumber(tCritical, 3)
+                    ' ИСПРАВЛЕНИЕ: явное преобразование в строку
+                    tCriticalForRows = CStr(FormatNumber(tCritical, 3))
                 Else
                     tCriticalForRows = "Ошибка поиска"
                 End If
@@ -475,27 +476,3 @@ For pIdx = 0 To UBound(powerLevels)
         resultRow = resultRow + 1
     End If
 Next
-
-' Восстанавливаем исходные значения генерации
-For idx = 0 To UBound(selectedNodeIndices)
-    nodeIdx = selectedNodeIndices(idx)
-    spNodePg.Z(nodeIdx) = originalGenValues(idx)
-Next
-
-' Пересчитываем режим с исходными значениями
-SolveUR()
-
-' Восстанавливаем исходное время отключения КЗ (если было сохранено)
-If originalTimeClear >= 0 Then
-    Call SetShortCircuitClearingTime(originalTimeClear)
-End If
-
-' Форматирование результатов
-wsResult.Columns.AutoFit
-
-MsgBox "Расчёт завершён. Обработано уровней мощности: " & (UBound(powerLevels) + 1), vbInformation, "Готово"
-
-On Error Resume Next
-xl.DisplayAlerts = True
-On Error GoTo 0
-
