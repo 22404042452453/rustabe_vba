@@ -180,7 +180,13 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
     
     Dim maxDelta: maxDelta = GetMaxDelta()
     Dim stableAtMax: stableAtMax = (maxDelta <= 180)
-    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, IIf(stableAtMax, CStr("устойчив"), CStr("нарушен")), dynRes)
+    Dim statusMax
+    If stableAtMax Then
+        statusMax = "устойчив"
+    Else
+        statusMax = "нарушен"
+    End If
+    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, statusMax, dynRes)
     
     ' Если при максимальном времени устойчивость сохранена, критическое время >= максимальное
     If stableAtMax Then
@@ -198,7 +204,13 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
     
     maxDelta = GetMaxDelta()
     Dim unstableAtMin: unstableAtMin = (maxDelta > 180)
-    Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDelta, IIf(unstableAtMin, CStr("нарушен"), CStr("устойчив")), dynRes)
+    Dim statusMin
+    If unstableAtMin Then
+        statusMin = "нарушен"
+    Else
+        statusMin = "устойчив"
+    End If
+    Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDelta, statusMin, dynRes)
     
     ' Если даже при минимальном времени устойчивость нарушена, критическое время = 0
     If unstableAtMin Then
@@ -235,7 +247,13 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
         
         maxDelta = GetMaxDelta()
         Dim stableNow: stableNow = (maxDelta <= 180)
-        Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDelta, IIf(stableNow, CStr("устойчив"), CStr("нарушен")), dynRes)
+        Dim statusNow
+        If stableNow Then
+            statusNow = "устойчив"
+        Else
+            statusNow = "нарушен"
+        End If
+        Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDelta, statusNow, dynRes)
         
         ' Проверяем устойчивость
         If Not stableNow Then
@@ -349,7 +367,13 @@ For pIdx = 0 To UBound(powerLevels)
         If dynRes = 0 Then
             maxDelta = GetMaxDelta()
             stableNow = (maxDelta <= 180)
-            Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, IIf(stableNow, CStr("устойчив"), CStr("нарушен")), dynRes)
+            Dim statusBase
+            If stableNow Then
+                statusBase = "устойчив"
+            Else
+                statusBase = "нарушен"
+            End If
+            Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, statusBase, dynRes)
             
             If Not stableNow Then
                 ' Нарушение устойчивости - используем двоичный поиск
