@@ -30,10 +30,10 @@ End If
 Set colGenName = tblGen.Cols("Name")
 Set colGenNy   = tblGen.Cols("Node")
 Set colGenSel  = tblGen.Cols("sel")
-Set colGenPgSet = tblGen.Cols("pg_set")
+Set colGenP    = tblGen.Cols("P") ' Базовая мощность генератора (100%)
 
-If colGenName Is Nothing Or colGenNy Is Nothing Then
-    MsgBox "Ошибка: Не найдены необходимые колонки в таблице Generator!", vbCritical, "Ошибка"
+If colGenName Is Nothing Or colGenNy Is Nothing Or colGenP Is Nothing Then
+    MsgBox "Ошибка: Не найдены необходимые колонки в таблице Generator (Name/Node/P)!", vbCritical, "Ошибка"
     WScript.Quit
 End If
 
@@ -46,16 +46,6 @@ If Err.Number <> 0 Then
     tblGen.Cols("sel").Prop(FL_ZAG) = "Выбор"
     Set colGenSel = tblGen.Cols("sel")
     MsgBox "Добавлено поле sel в таблицу Generator. Выберите генераторы и запустите скрипт повторно.", vbInformation, "Подготовка"
-    WScript.Quit
-End If
-Err.Clear
-' Проверка/создание поля pg_set для базовой мощности (МВт)
-Set colGenPgSet = tblGen.Cols("pg_set")
-If Err.Number <> 0 Then
-    tblGen.Cols.Add "pg_set", PR_FLOAT
-    tblGen.Cols("pg_set").Prop(FL_ZAG) = "Pg задано"
-    Set colGenPgSet = tblGen.Cols("pg_set")
-    MsgBox "Добавлено поле pg_set в таблицу Generator. Заполните базовую мощность и запустите скрипт повторно.", vbInformation, "Подготовка"
     WScript.Quit
 End If
 On Error GoTo 0
@@ -190,7 +180,7 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
     
     Dim maxDelta: maxDelta = GetMaxDelta()
     Dim stableAtMax: stableAtMax = (maxDelta <= 180)
-    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, IIf(stableAtMax, "устойчив", "нарушен"), dynRes)
+    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, IIf(stableAtMax, CStr("устойчив"), CStr("нарушен")), dynRes)
     
     ' Если при максимальном времени устойчивость сохранена, критическое время >= максимальное
     If stableAtMax Then
@@ -208,7 +198,7 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
     
     maxDelta = GetMaxDelta()
     Dim unstableAtMin: unstableAtMin = (maxDelta > 180)
-    Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDelta, IIf(unstableAtMin, "нарушен", "устойчив"), dynRes)
+    Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDelta, IIf(unstableAtMin, CStr("нарушен"), CStr("устойчив")), dynRes)
     
     ' Если даже при минимальном времени устойчивость нарушена, критическое время = 0
     If unstableAtMin Then
@@ -245,7 +235,7 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
         
         maxDelta = GetMaxDelta()
         Dim stableNow: stableNow = (maxDelta <= 180)
-        Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDelta, IIf(stableNow, "устойчив", "нарушен"), dynRes)
+        Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDelta, IIf(stableNow, CStr("устойчив"), CStr("нарушен")), dynRes)
         
         ' Проверяем устойчивость
         If Not stableNow Then
@@ -301,13 +291,9 @@ While genIdx >= 0
         ReDim Preserve originalGenValues(UBound(originalGenValues) + 1)
         originalGenValues(UBound(originalGenValues)) = spNodePg.Z(nodeIdx)
         
-        ' Базовая мощность: из pg_set если задана, иначе текущая pg
+        ' Базовая мощность: из Generator.P (100%)
         ReDim Preserve basePgValues(UBound(basePgValues) + 1)
-        If Not IsEmpty(colGenPgSet.Z(genIdx)) And Not IsNull(colGenPgSet.Z(genIdx)) Then
-            basePgValues(UBound(basePgValues)) = CDbl(colGenPgSet.Z(genIdx))
-        Else
-            basePgValues(UBound(basePgValues)) = spNodePg.Z(nodeIdx)
-        End If
+        basePgValues(UBound(basePgValues)) = CDbl(colGenP.Z(genIdx))
     End If
     
     genIdx = tblGen.FindNextSel(genIdx)
@@ -363,7 +349,7 @@ For pIdx = 0 To UBound(powerLevels)
         If dynRes = 0 Then
             maxDelta = GetMaxDelta()
             stableNow = (maxDelta <= 180)
-            Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, IIf(stableNow, "устойчив", "нарушен"), dynRes)
+            Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, IIf(stableNow, CStr("устойчив"), CStr("нарушен")), dynRes)
             
             If Not stableNow Then
                 ' Нарушение устойчивости - используем двоичный поиск
@@ -388,13 +374,13 @@ For pIdx = 0 To UBound(powerLevels)
             wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
             wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта динамики"
             wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & dynRes & ")"
-            Call LogBinaryStep(powerLevel, "base_dyn_err", "", "", "", "", "", "dyn_err", dynRes)
+            Call LogBinaryStep(powerLevel, "base_dyn_err", "", "", "", "", "", CStr("dyn_err"), dynRes)
         End If
     Else
         wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
         wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта УР"
         wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & urRes & ")"
-        Call LogBinaryStep(powerLevel, "base_ur_err", "", "", "", "", "", "ur_err", urRes)
+        Call LogBinaryStep(powerLevel, "base_ur_err", "", "", "", "", "", CStr("ur_err"), urRes)
     End If
     
     resultRow = resultRow + 1
