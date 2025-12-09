@@ -1,56 +1,33 @@
-' Скрипт для изменения времени отключения КЗ в сценарии
-
-' Функция установки времени отключения КЗ
-Sub SetShortCircuitClearingTime(tClear)
+' Скрипт для просмотра всех типов действий в сценарии
+Sub ShowAllActionTypes()
     On Error Resume Next
     
     Set tblEvents = Rastr.Tables("DFWAutoActionScn")
     
     If Not tblEvents Is Nothing Then
         Set colType = tblEvents.Cols("Type")
-        Set colTimeStart = tblEvents.Cols("TimeStart")
+        Set colName = tblEvents.Cols("Name")
         
-        If Not colType Is Nothing And Not colTimeStart Is Nothing Then
-            Dim kzTime
-            Dim kzFound
-            kzFound = False
+        If Not colType Is Nothing Then
+            Dim msg
+            msg = "Действия в сценарии:" & vbCrLf & vbCrLf
             
-            ' Ищем КЗ и запоминаем его время начала
             For i = 0 To tblEvents.Size - 1
-                If colType.ZS(i) = "КЗ" Then
-                    kzTime = colTimeStart.Z(i)
-                    kzFound = True
-                    
-                    ' Ищем следующий "Шунт Z" после этого КЗ
-                    For j = i + 1 To tblEvents.Size - 1
-                        If colType.ZS(j) = "Шунт Z" Then
-                            ' Устанавливаем время отключения КЗ
-                            colTimeStart.Z(j) = kzTime + (tClear / 1000.0)
-                            MsgBox "Найдено КЗ в строке " & i & ", Шунт Z в строке " & j & vbCrLf & _
-                                   "Время КЗ: " & kzTime & " с" & vbCrLf & _
-                                   "Новое время Шунт Z: " & colTimeStart.Z(j) & " с"
-                            Exit For
-                        End If
-                    Next
-                    Exit For
+                msg = msg & "Строка " & i & ": Тип = '" & colType.ZS(i) & "'"
+                If Not colName Is Nothing Then
+                    msg = msg & ", Название = '" & colName.ZS(i) & "'"
                 End If
+                msg = msg & vbCrLf
             Next
             
-            If Not kzFound Then
-                MsgBox "КЗ не найдено в сценарии"
-            End If
+            MsgBox msg
         End If
+    Else
+        MsgBox "Таблица DFWAutoActionScn не найдена"
     End If
     
     On Error GoTo 0
 End Sub
 
-' Основная логика
-tInput = InputBox("Введите время отключения КЗ (мс):", "Изменение времени", "500")
-
-If IsNumeric(tInput) Then
-    tClear = CDbl(tInput)
-    Call SetShortCircuitClearingTime(tClear)
-Else
-    MsgBox "Неверный ввод времени."
-End If
+' Запускаем
+Call ShowAllActionTypes()
