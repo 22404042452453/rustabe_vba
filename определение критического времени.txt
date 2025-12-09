@@ -250,7 +250,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
         Exit Function
     End If
 
-    ' Проверка при tMin (быстрое отключение - должно быть НЕУСТОЙЧИВО)
+    ' Проверка при tMin (короткая длительность шунта - должно быть УСТОЙЧИВО)
     Call SetShuntDuration(tMin)
     dynRes = spFWDynamic.Run()
     If dynRes <> 0 Then
@@ -259,19 +259,22 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     End If
 
     Dim maxDelta: maxDelta = GetMaxDelta()
-    Dim unstableAtMin: unstableAtMin = (maxDelta > 180)
+    Dim stableAtMin: stableAtMin = (maxDelta <= 180)
     Dim statusMin
-    If unstableAtMin Then
-        statusMin = "нарушен"
-    Else
+    If stableAtMin Then
         statusMin = "устойчив"
+    Else
+        statusMin = "нарушен"
     End If
     Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDelta, statusMin, dynRes, lastSnapIdx)
 
-    ' Если при минимальном времени система устойчива - что-то не так
-    ' Но продолжаем поиск
+    ' Если при минимальном времени система неустойчива - что-то не так
+    If Not stableAtMin Then
+        BinarySearchCriticalTime = tMin
+        Exit Function
+    End If
 
-    ' Проверка при tMax (медленное отключение - должно быть УСТОЙЧИВО)
+    ' Проверка при tMax (длинная длительность шунта - должно быть НЕУСТОЙЧИВО)
     For idx = 0 To UBound(selectedGenIndices)
         genIdx = selectedGenIndices(idx)
         colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
@@ -289,28 +292,22 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     End If
 
     maxDelta = GetMaxDelta()
-    Dim stableAtMax: stableAtMax = (maxDelta <= 180)
+    Dim unstableAtMax: unstableAtMax = (maxDelta > 180)
     Dim statusMax
-    If stableAtMax Then
-        statusMax = "устойчив"
-    Else
+    If unstableAtMax Then
         statusMax = "нарушен"
+    Else
+        statusMax = "устойчив"
     End If
     Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, statusMax, dynRes, lastSnapIdx)
 
-    ' Если при максимальном времени всё равно нет устойчивости
-    If Not stableAtMax Then
+    ' Если при максимальном времени всё ещё устойчивость
+    If Not unstableAtMax Then
         BinarySearchCriticalTime = tMax  ' Возвращаем максимум как "не найдено"
         Exit Function
     End If
 
-    ' Если при минимальном времени уже устойчиво
-    If Not unstableAtMin Then
-        BinarySearchCriticalTime = tMin
-        Exit Function
-    End If
-
-    ' ДВОИЧНЫЙ ПОИСК: ищем минимальное время, при котором ещё устойчиво
+    ' ДВОИЧНЫЙ ПОИСК: ищем максимальное время, при котором ещё устойчиво
     Do While (tMax - tMin) > epsilon And iteration < maxIterations
         iteration = iteration + 1
         tMid = (tMin + tMax) / 2.0
@@ -344,18 +341,18 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
         End If
         Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDelta, statusNow, dynRes, lastSnapIdx)
 
-        ' ИСПРАВЛЕННАЯ ЛОГИКА:
+        ' ИСПРАВЛЕННАЯ ЛОГИКА для длительности шунта:
         If stableNow Then
-            ' Устойчиво - можем попробовать меньшее время (двигаем верхнюю границу)
-            tMax = tMid
-        Else
-            ' Неустойчиво - нужно большее время (двигаем нижнюю границу)
+            ' Устойчиво - можем попробовать большее время (двигаем нижнюю границу)
             tMin = tMid
+        Else
+            ' Неустойчиво - нужно меньшее время (двигаем верхнюю границу)
+            tMax = tMid
         End If
     Loop
 
-    ' Критическое время - это tMax (минимальное время, при котором ещё устойчиво)
-    BinarySearchCriticalTime = tMax
+    ' Критическое время - это tMin (максимальное время, при котором ещё устойчиво)
+    BinarySearchCriticalTime = tMin
 End Function
 
 ' --- Основная логика ---
