@@ -225,7 +225,7 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndi
     ' Параметры двоичного поиска
     Dim tMin: tMin = 0.0
     Dim tMax: tMax = 1.0  ' Максимальное время отключения КЗ (сек)
-    Dim epsilon: epsilon = 0.001  ' Точность поиска
+    Dim epsilon: epsilon = 0.01  ' Точность поиска
     Dim tCritical: tCritical = -1
     Dim maxIterations: maxIterations = 50  ' Защита от бесконечного цикла
     Dim iteration: iteration = 0
@@ -337,10 +337,12 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndi
         End If
     Loop
     
-    ' Критическое время - это максимальное время отключения КЗ, при котором устойчивость еще сохранена
-    ' tMin - максимальное время, при котором устойчивость сохранена
-    ' tMax - минимальное время, при котором устойчивость нарушена
-    BinarySearchCriticalTime = tMin
+    ' Критическое время: если интервал <= 0.01, то tMax - 0.01, иначе tMin
+    If tMax - tMin <= 0.01 Then
+        BinarySearchCriticalTime = tMax - 0.01
+    Else
+        BinarySearchCriticalTime = tMin
+    End If
 End Function
 
 ' --- Основная логика ---
