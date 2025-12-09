@@ -223,7 +223,7 @@ Sub SetShortCircuitClearingTime(tClear)
 End Sub
 
 ' --- Функция двоичного поиска критического времени отключения КЗ ---
-Function BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndices)
+Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     ' Параметры двоичного поиска
     Dim tMin: tMin = 0.0
     Dim tMax: tMax = 1.0  ' Максимальное время отключения КЗ (сек)
@@ -235,7 +235,7 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndi
     ' Восстанавливаем мощность генераторов для текущего уровня мощности
     For idx = 0 To UBound(selectedGenIndices)
         genIdx = selectedGenIndices(idx)
-        colGenP.Z(genIdx) = originalGenValues(idx) * powerLevel / 100.0
+        colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
     Next
     
     ' Пересчитываем режим
@@ -300,7 +300,7 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndi
         ' Восстанавливаем мощность генераторов
         For idx = 0 To UBound(selectedGenIndices)
             genIdx = selectedGenIndices(idx)
-            colGenP.Z(genIdx) = originalGenValues(idx) * powerLevel / 100.0
+            colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
         Next
         
         ' Пересчитываем режим
@@ -339,12 +339,8 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndi
         End If
     Loop
     
-    ' Критическое время: если интервал <= 0.01, то tMax - 0.01, иначе tMin
-    If tMax - tMin <= 0.01 Then
-        BinarySearchCriticalTime = tMax - 0.01
-    Else
-        BinarySearchCriticalTime = tMin
-    End If
+    ' Критическое время: tMin (максимальное время с устойчивостью)
+    BinarySearchCriticalTime = tMin
 End Function
 
 ' --- Основная логика ---
@@ -483,7 +479,7 @@ For pIdx = 0 To UBound(powerLevels)
             
             If anyViolation Then
                 ' Нарушение устойчивости - используем двоичный поиск (по системе)
-                tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndices)
+                tCritical = BinarySearchCriticalTime(powerLevel, basePgValues, selectedGenIndices)
                 If IsNumeric(tCritical) And tCritical >= 0 Then
                     ' ИСПРАВЛЕНИЕ: безопасное преобразование
                     tCriticalForRows = FormatNumber(CDbl(tCritical), 3)
