@@ -1,4 +1,120 @@
-' ТЕСТ установки времени
-Call SetShortCircuitClearingTime(500.0)
-MsgBox "Время установлено. Проверьте таблицу сценариев вручную!", vbInformation
-WScript.Quit
+' Тестовый скрипт для проверки установки времени отключения КЗ
+
+' Инициализация Excel
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+xl.DisplayAlerts = False
+Set wb = xl.Workbooks.Add
+Set wsData = wb.Worksheets(1)
+wsData.Name = "Данные"
+
+' Rastr таблицы
+Set tblGen = Rastr.Tables("Generator")
+Set spFWDynamic = Rastr.FWDynamic
+
+' Получение колонок
+Set colGenP = tblGen.Cols("P")
+
+' Функция SolveUR
+Function SolveUR()
+    SolveUR = Rastr.rgm("p")
+End Function
+
+' Функция GetMaxDelta
+Function GetMaxDelta()
+    Dim maxDelta: maxDelta = 0
+    Dim lastSnapIdx: lastSnapIdx = -1
+
+    wsData.Cells.Clear
+
+    Dim dataCol: dataCol = 1
+
+    For i = 0 To tblGen.Size - 1
+        Plot = Empty
+        npoints = 0
+
+        For snapIdx = 5 To 0 Step -1
+            On Error Resume Next
+            Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
+            errNum = Err.Number
+            If errNum = 0 And IsArray(Plot) Then
+                npoints = UBound(Plot, 1) + 1
+                If npoints > 0 Then
+                    lastSnapIdx = snapIdx
+                    Exit For
+                End If
+            End If
+            On Error GoTo 0
+        Next
+
+        If errNum = 0 And IsArray(Plot) And npoints > 0 Then
+            wsData.Cells(2, dataCol).Resize(npoints, 2).Value = Plot
+
+            deltaStartAddr = wsData.Cells(2, dataCol).Address(False, False, 1, True)
+            deltaEndAddr = wsData.Cells(npoints + 1, dataCol).Address(False, False, 1, True)
+            deltaRange = deltaStartAddr & ":" & deltaEndAddr
+
+            wsData.Cells(2, dataCol + 2).Formula = "=MAX(" & deltaRange & ")"
+
+            xl.Calculate
+
+            maxGen = Abs(wsData.Cells(2, dataCol + 2).Value)
+            If maxGen > maxDelta Then
+                maxDelta = maxGen
+            End If
+
+            dataCol = dataCol + 3
+        End If
+    Next
+
+    GetMaxDelta = maxDelta
+End Function
+
+' Функция установки времени
+Sub SetShortCircuitClearingTime(tClear)
+    On Error Resume Next
+    Set tblEvents = Rastr.Tables("DWFAutoActionScn")
+    If Not tblEvents Is Nothing Then
+        Set colType = tblEvents.Cols("Type")
+        Set colOtkl = tblEvents.Cols("Откл")
+        If Not colType Is Nothing And Not colOtkl Is Nothing Then
+            For i = 0 To tblEvents.Size - 1
+                If colType.ZS(i) = "КЗ" Then
+                    colOtkl.Z(i) = tClear
+                    Exit For
+                End If
+            Next
+        End If
+    End If
+    On Error GoTo 0
+End Sub
+
+' Основной тест
+tInput = InputBox("Введите время отключения КЗ (мс):", "Тест времени", "500")
+
+If IsNumeric(tInput) Then
+    tClear = CDbl(tInput)
+
+    ' Устанавливаем время
+    Call SetShortCircuitClearingTime(tClear)
+
+    ' Пересчитываем режим
+    If SolveUR() <> 0 Then
+        MsgBox "Ошибка SolveUR"
+        WScript.Quit
+    End If
+
+    ' Запускаем динамику
+    dynRes = spFWDynamic.Run()
+    If dynRes <> 0 Then
+        MsgBox "Ошибка динамики: " & dynRes
+        WScript.Quit
+    End If
+
+    ' Получаем MaxDelta
+    maxDelta = GetMaxDelta()
+
+    MsgBox "Время: " & tClear & " мс" & vbCrLf & "MaxDelta: " & maxDelta & vbCrLf & "Статус: " & IIf(maxDelta > 180, "Нарушена", "Устойчива")
+Else
+    MsgBox "Неверный ввод"
+End If
