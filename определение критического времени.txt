@@ -62,7 +62,7 @@ End If
 
 ' --- Логирование в Excel ---
 Dim logRow: logRow = 1
-Sub LogBinaryStep(powerLevel, phase, iteration, tMin, tMid, tMax, maxDelta, statusText, dynCode)
+Sub LogBinaryStep(powerLevel, phase, iteration, tMin, tMid, tMax, maxDelta, statusText, dynCode, snapIdx)
     wsLog.Cells(logRow, 1).Value = powerLevel
     wsLog.Cells(logRow, 2).Value = phase
     wsLog.Cells(logRow, 3).Value = iteration
@@ -72,6 +72,7 @@ Sub LogBinaryStep(powerLevel, phase, iteration, tMin, tMid, tMax, maxDelta, stat
     wsLog.Cells(logRow, 7).Value = maxDelta
     wsLog.Cells(logRow, 8).Value = statusText
     wsLog.Cells(logRow, 9).Value = dynCode
+    wsLog.Cells(logRow, 10).Value = snapIdx
     logRow = logRow + 1
 End Sub
 
@@ -81,6 +82,9 @@ If spFWDynamic Is Nothing Then
     MsgBox "Ошибка: FWDynamic недоступен! Убедитесь, что сценарий загружен.", vbCritical, "Ошибка"
     WScript.Quit
 End If
+
+' Глобальная переменная для последнего snapIdx
+Dim lastSnapIdx: lastSnapIdx = -1
 
 ' Сохраняем исходное время отключения КЗ (если доступно)
 Dim originalTimeClear: originalTimeClear = -1
@@ -96,18 +100,26 @@ End Function
 ' --- Функция получения MaxDelta и проверки устойчивости ---
 Function GetMaxDelta()
     Dim maxDelta: maxDelta = 0
+    lastSnapIdx = -1
     
     For i = 0 To tblGen.Size - 1
         Plot = Empty
         npoints = 0
         
-        On Error Resume Next
-        Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, 0)
-        errNum = Err.Number
-        If errNum = 0 And IsArray(Plot) Then
-            npoints = UBound(Plot, 1) + 1
-        End If
-        On Error GoTo 0
+        ' Пробуем snapIdx от 5 до 0
+        For snapIdx = 5 To 0 Step -1
+            On Error Resume Next
+            Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
+            errNum = Err.Number
+            If errNum = 0 And IsArray(Plot) Then
+                npoints = UBound(Plot, 1) + 1
+                If npoints > 0 Then
+                    lastSnapIdx = snapIdx
+                    Exit For
+                End If
+            End If
+            On Error GoTo 0
+        Next
         
         If errNum = 0 And IsArray(Plot) And npoints > 0 Then
             For j = 0 To npoints - 1
@@ -138,13 +150,19 @@ Function GetGenMaxDelta(genIndex)
     Plot = Empty
     npoints = 0
     
-    On Error Resume Next
-    Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, 0)
-    errNum = Err.Number
-    If errNum = 0 And IsArray(Plot) Then
-        npoints = UBound(Plot, 1) + 1
-    End If
-    On Error GoTo 0
+    ' Пробуем snapIdx от 5 до 0
+    For snapIdx = 5 To 0 Step -1
+        On Error Resume Next
+        Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, snapIdx)
+        errNum = Err.Number
+        If errNum = 0 And IsArray(Plot) Then
+            npoints = UBound(Plot, 1) + 1
+            If npoints > 0 Then
+                Exit For
+            End If
+        End If
+        On Error GoTo 0
+    Next
     
     If errNum = 0 And IsArray(Plot) And npoints > 0 Then
         For j = 0 To npoints - 1
@@ -219,7 +237,7 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndi
     Else
         statusMax = "нарушен"
     End If
-    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, statusMax, dynRes)
+    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, statusMax, dynRes, lastSnapIdx)
     
     ' Если при максимальном времени устойчивость сохранена, критическое время >= максимальное
     If stableAtMax Then
@@ -243,7 +261,7 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndi
     Else
         statusMin = "устойчив"
     End If
-    Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDelta, statusMin, dynRes)
+    Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDelta, statusMin, dynRes, lastSnapIdx)
     
     ' Если даже при минимальном времени устойчивость нарушена, критическое время = 0
     If unstableAtMin Then
@@ -286,7 +304,7 @@ Function BinarySearchCriticalTime(powerLevel, originalGenValues, selectedGenIndi
         Else
             statusNow = "нарушен"
         End If
-        Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDelta, statusNow, dynRes)
+        Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDelta, statusNow, dynRes, lastSnapIdx)
         
         ' Проверяем устойчивость
         If Not stableNow Then
@@ -380,6 +398,7 @@ wsLog.Cells(1, 6).Value = "t_max"
 wsLog.Cells(1, 7).Value = "MaxDelta"
 wsLog.Cells(1, 8).Value = "Статус"
 wsLog.Cells(1, 9).Value = "DynCode"
+wsLog.Cells(1, 10).Value = "SnapIdx"
 wsLog.Rows(1).Font.Bold = True
 logRow = 2
 
@@ -435,7 +454,7 @@ For pIdx = 0 To UBound(powerLevels)
             Else
                 statusBase = "нарушен"
             End If
-            Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, statusBase, dynRes)
+            Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, statusBase, dynRes, lastSnapIdx)
             
             If anyViolation Then
                 ' Нарушение устойчивости - используем двоичный поиск (по системе)
@@ -471,7 +490,7 @@ For pIdx = 0 To UBound(powerLevels)
             wsResult.Cells(resultRow, 3).Value = ""
             wsResult.Cells(resultRow, 4).Value = "Ошибка расчёта динамики"
             wsResult.Cells(resultRow, 5).Value = "Ошибка (код " & dynRes & ")"
-            Call LogBinaryStep(powerLevel, "base_dyn_err", "", "", "", "", "", CStr("dyn_err"), dynRes)
+            Call LogBinaryStep(powerLevel, "base_dyn_err", "", "", "", "", "", CStr("dyn_err"), dynRes, -1)
             resultRow = resultRow + 1
         End If
     Else
@@ -480,7 +499,7 @@ For pIdx = 0 To UBound(powerLevels)
         wsResult.Cells(resultRow, 3).Value = ""
         wsResult.Cells(resultRow, 4).Value = "Ошибка расчёта УР"
         wsResult.Cells(resultRow, 5).Value = "Ошибка (код " & urRes & ")"
-        Call LogBinaryStep(powerLevel, "base_ur_err", "", "", "", "", "", CStr("ur_err"), urRes)
+        Call LogBinaryStep(powerLevel, "base_ur_err", "", "", "", "", "", CStr("ur_err"), urRes, -1)
         resultRow = resultRow + 1
     End If
 Next
