@@ -1,0 +1,358 @@
+' --- Определение критического времени отключения КЗ ---
+' Скрипт для определения критического времени отключения КЗ
+' при изменении мощности выбранных генераторов от 60% до 100%
+
+' --- Инициализация Excel ---
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+xl.DisplayAlerts = False
+Set wb = xl.Workbooks.Add
+Set wsData = wb.Worksheets(1)
+wsData.Name = "Данные"
+Set wsResult = wb.Worksheets.Add
+wsResult.Name = "Результаты"
+
+Dim resultRow: resultRow = 1
+
+' --- Rastr таблицы ---
+Set spBranch = Rastr.Tables("vetv")
+Set spNode   = Rastr.Tables("node")
+Set tblGen   = Rastr.Tables("Generator")
+
+If tblGen Is Nothing Then
+    MsgBox "Ошибка: Таблица Generator не найдена!", vbCritical, "Ошибка"
+    WScript.Quit
+End If
+
+' --- Получение колонок ---
+Set colGenName = tblGen.Cols("Name")
+Set colGenNy   = tblGen.Cols("ny")
+Set colGenSel  = tblGen.Cols("sel")
+
+If colGenName Is Nothing Or colGenNy Is Nothing Then
+    MsgBox "Ошибка: Не найдены необходимые колонки в таблице Generator!", vbCritical, "Ошибка"
+    WScript.Quit
+End If
+
+' Проверка наличия поля sel для выбора генераторов
+On Error Resume Next
+Set colGenSel = tblGen.Cols("sel")
+If Err.Number <> 0 Then
+    ' Создаем поле sel, если его нет
+    tblGen.Cols.Add "sel", PR_BOOL
+    tblGen.Cols("sel").Prop(FL_ZAG) = "Выбор"
+    Set colGenSel = tblGen.Cols("sel")
+    MsgBox "Добавлено поле sel в таблицу Generator. Выберите генераторы и запустите скрипт повторно.", vbInformation, "Подготовка"
+    WScript.Quit
+End If
+On Error GoTo 0
+
+' Получение колонок узлов
+Set spNodeNy   = spNode.Cols("ny")
+Set spNodePg   = spNode.Cols("pg")  ' Генерация в узле
+
+If spNodePg Is Nothing Then
+    MsgBox "Ошибка: Не найдена колонка генерации в таблице node (pg)!", vbCritical, "Ошибка"
+    WScript.Quit
+End If
+
+' --- Получение FWDynamic ---
+Set spFWDynamic = Rastr.FWDynamic
+If spFWDynamic Is Nothing Then
+    MsgBox "Ошибка: FWDynamic недоступен! Убедитесь, что сценарий загружен.", vbCritical, "Ошибка"
+    WScript.Quit
+End If
+
+' Сохраняем исходное время отключения КЗ (если доступно)
+Dim originalTimeClear: originalTimeClear = -1
+On Error Resume Next
+originalTimeClear = spFWDynamic.TimeClear
+On Error GoTo 0
+
+' --- Функция пересчёта установившегося режима ---
+Function SolveUR()
+    SolveUR = Rastr.rgm("p")
+End Function
+
+' --- Функция проверки нарушения устойчивости ---
+Function CheckStabilityViolation()
+    CheckStabilityViolation = False
+    Dim maxDelta: maxDelta = 0
+    
+    For i = 0 To tblGen.Size - 1
+        On Error Resume Next
+        Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, 0)
+        errNum = Err.Number
+        On Error GoTo 0
+        
+        If errNum = 0 And IsArray(Plot) Then
+            npoints = UBound(Plot, 1) + 1
+            If npoints > 0 Then
+                For j = 0 To npoints - 1
+                    deltaVal = Plot(j, 0)  ' Delta в первой колонке
+                    If Abs(deltaVal) > maxDelta Then
+                        maxDelta = Abs(deltaVal)
+                    End If
+                Next
+            End If
+        End If
+    Next
+    
+    ' Нарушение устойчивости при Delta > 180 градусов
+    If maxDelta > 180 Then
+        CheckStabilityViolation = True
+    End If
+End Function
+
+' --- Функция установки времени отключения КЗ ---
+' Примечание: механизм изменения времени отключения КЗ может отличаться
+' в зависимости от версии Rastr и структуры сценария
+Sub SetShortCircuitClearingTime(tClear)
+    On Error Resume Next
+    ' Пробуем установить через свойство FWDynamic
+    spFWDynamic.TimeClear = tClear
+    ' Альтернативные варианты (раскомментировать при необходимости):
+    ' spFWDynamic.Params("TimeClear") = tClear
+    ' Или через таблицу событий динамики:
+    ' Set tblEvents = Rastr.Tables("Event")
+    ' If Not tblEvents Is Nothing Then
+    '     ' Найти событие КЗ и изменить время отключения
+    ' End If
+    On Error GoTo 0
+End Sub
+
+' --- Функция двоичного поиска критического времени отключения КЗ ---
+Function BinarySearchCriticalTime(powerLevel, originalGenValues, nodeIndices)
+    ' Параметры двоичного поиска
+    Dim tMin: tMin = 0.0
+    Dim tMax: tMax = 1.0  ' Максимальное время отключения КЗ (сек)
+    Dim epsilon: epsilon = 0.001  ' Точность поиска
+    Dim tCritical: tCritical = -1
+    Dim maxIterations: maxIterations = 50  ' Защита от бесконечного цикла
+    Dim iteration: iteration = 0
+    
+    ' Восстанавливаем генерацию для текущего уровня мощности
+    For idx = 0 To UBound(nodeIndices)
+        nodeIdx = nodeIndices(idx)
+        spNodePg.Z(nodeIdx) = originalGenValues(idx) * powerLevel / 100.0
+    Next
+    
+    ' Пересчитываем режим
+    If SolveUR() <> 0 Then
+        BinarySearchCriticalTime = -1
+        Exit Function
+    End If
+    
+    ' Проверяем устойчивость при максимальном времени отключения
+    Call SetShortCircuitClearingTime(tMax)
+    dynRes = spFWDynamic.Run()
+    If dynRes <> 0 Then
+        BinarySearchCriticalTime = -1
+        Exit Function
+    End If
+    
+    Dim stableAtMax: stableAtMax = Not CheckStabilityViolation()
+    
+    ' Если при максимальном времени устойчивость сохранена, критическое время >= максимальное
+    If stableAtMax Then
+        BinarySearchCriticalTime = tMax
+        Exit Function
+    End If
+    
+    ' Проверяем устойчивость при минимальном времени отключения
+    Call SetShortCircuitClearingTime(tMin)
+    dynRes = spFWDynamic.Run()
+    If dynRes <> 0 Then
+        BinarySearchCriticalTime = -1
+        Exit Function
+    End If
+    
+    Dim unstableAtMin: unstableAtMin = CheckStabilityViolation()
+    
+    ' Если даже при минимальном времени устойчивость нарушена, критическое время = 0
+    If unstableAtMin Then
+        BinarySearchCriticalTime = 0.0
+        Exit Function
+    End If
+    
+    ' Двоичный поиск: ищем границу между устойчивостью и нарушением
+    Do While (tMax - tMin) > epsilon And iteration < maxIterations
+        iteration = iteration + 1
+        tMid = (tMin + tMax) / 2.0
+        
+        ' Восстанавливаем генерацию
+        For idx = 0 To UBound(nodeIndices)
+            nodeIdx = nodeIndices(idx)
+            spNodePg.Z(nodeIdx) = originalGenValues(idx) * powerLevel / 100.0
+        Next
+        
+        ' Пересчитываем режим
+        If SolveUR() <> 0 Then
+            BinarySearchCriticalTime = -1
+            Exit Function
+        End If
+        
+        ' Устанавливаем время отключения
+        Call SetShortCircuitClearingTime(tMid)
+        
+        ' Запускаем динамику
+        dynRes = spFWDynamic.Run()
+        If dynRes <> 0 Then
+            BinarySearchCriticalTime = -1
+            Exit Function
+        End If
+        
+        ' Проверяем устойчивость
+        If CheckStabilityViolation() Then
+            ' Устойчивость нарушена - критическое время меньше tMid
+            tMax = tMid
+        Else
+            ' Устойчивость сохранена - критическое время больше tMid
+            tMin = tMid
+        End If
+    Loop
+    
+    ' Критическое время - это максимальное время отключения КЗ, при котором устойчивость еще сохранена
+    ' tMin - максимальное время, при котором устойчивость сохранена
+    ' tMax - минимальное время, при котором устойчивость нарушена
+    BinarySearchCriticalTime = tMin
+End Function
+
+' --- Основная логика ---
+
+' 1. Получаем список выбранных генераторов
+Dim selectedGenIndices()
+Dim selectedNodeIndices()
+Dim originalGenValues()
+ReDim selectedGenIndices(-1)
+ReDim selectedNodeIndices(-1)
+ReDim originalGenValues(-1)
+
+tblGen.SetSel("sel")
+genIdx = tblGen.FindNextSel(-1)
+While genIdx >= 0
+    ReDim Preserve selectedGenIndices(UBound(selectedGenIndices) + 1)
+    selectedGenIndices(UBound(selectedGenIndices)) = genIdx
+    
+    ' Получаем номер узла генератора
+    nodeNum = colGenNy.Z(genIdx)
+    
+    ' Находим индекс узла по номеру
+    nodeIdx = -1
+    For i = 0 To spNode.Size - 1
+        If spNodeNy.Z(i) = nodeNum Then
+            nodeIdx = i
+            Exit For
+        End If
+    Next
+    
+    If nodeIdx >= 0 Then
+        ReDim Preserve selectedNodeIndices(UBound(selectedNodeIndices) + 1)
+        selectedNodeIndices(UBound(selectedNodeIndices)) = nodeIdx
+        
+        ' Сохраняем исходное значение генерации
+        ReDim Preserve originalGenValues(UBound(originalGenValues) + 1)
+        originalGenValues(UBound(originalGenValues)) = spNodePg.Z(nodeIdx)
+    End If
+    
+    genIdx = tblGen.FindNextSel(genIdx)
+Wend
+
+If UBound(selectedGenIndices) < 0 Then
+    MsgBox "Не выбрано ни одного генератора! Отметьте генераторы в поле sel и запустите скрипт повторно.", vbExclamation, "Нет выбора"
+    WScript.Quit
+End If
+
+' 2. Заголовок таблицы результатов
+wsResult.Cells(resultRow, 1).Value = "Уровень мощности (%)"
+wsResult.Cells(resultRow, 2).Value = "Критическое время отключения КЗ (сек)"
+wsResult.Cells(resultRow, 3).Value = "Статус"
+wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 3)).Font.Bold = True
+resultRow = resultRow + 1
+
+' 3. Цикл по уровням мощности (60%, 70%, 80%, 90%, 100%)
+Dim powerLevels(4)
+powerLevels(0) = 60
+powerLevels(1) = 70
+powerLevels(2) = 80
+powerLevels(3) = 90
+powerLevels(4) = 100
+
+For pIdx = 0 To UBound(powerLevels)
+    powerLevel = powerLevels(pIdx)
+    
+    ' Устанавливаем генерацию для текущего уровня мощности
+    For idx = 0 To UBound(selectedNodeIndices)
+        nodeIdx = selectedNodeIndices(idx)
+        spNodePg.Z(nodeIdx) = originalGenValues(idx) * powerLevel / 100.0
+    Next
+    
+    ' Пересчитываем установившийся режим
+    urRes = SolveUR()
+    If urRes <> 0 Then
+        wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+        wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта УР"
+        wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & urRes & ")"
+        resultRow = resultRow + 1
+        GoTo NextPowerLevel
+    End If
+    
+    ' Запускаем динамику с исходным временем отключения КЗ
+    dynRes = spFWDynamic.Run()
+    If dynRes <> 0 Then
+        wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+        wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта динамики"
+        wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & dynRes & ")"
+        resultRow = resultRow + 1
+        GoTo NextPowerLevel
+    End If
+    
+    ' Проверяем нарушение устойчивости
+    If CheckStabilityViolation() Then
+        ' Нарушение устойчивости - используем двоичный поиск
+        tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedNodeIndices)
+        
+        If tCritical >= 0 Then
+            wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+            wsResult.Cells(resultRow, 2).Value = FormatNumber(tCritical, 3)
+            wsResult.Cells(resultRow, 3).Value = "Нарушение устойчивости"
+        Else
+            wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+            wsResult.Cells(resultRow, 2).Value = "Ошибка поиска"
+            wsResult.Cells(resultRow, 3).Value = "Ошибка определения критического времени"
+        End If
+    Else
+        ' Устойчивость сохранена - критическое время = максимальное (или не определено)
+        wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+        wsResult.Cells(resultRow, 2).Value = "> 1.0"  ' Или максимальное время
+        wsResult.Cells(resultRow, 3).Value = "Устойчивость сохранена"
+    End If
+    
+    resultRow = resultRow + 1
+    
+NextPowerLevel:
+Next
+
+' Восстанавливаем исходные значения генерации
+For idx = 0 To UBound(selectedNodeIndices)
+    nodeIdx = selectedNodeIndices(idx)
+    spNodePg.Z(nodeIdx) = originalGenValues(idx)
+Next
+
+' Пересчитываем режим с исходными значениями
+SolveUR()
+
+' Восстанавливаем исходное время отключения КЗ (если было сохранено)
+If originalTimeClear >= 0 Then
+    Call SetShortCircuitClearingTime(originalTimeClear)
+End If
+
+' Форматирование результатов
+wsResult.Columns.AutoFit
+
+MsgBox "Расчёт завершён. Обработано уровней мощности: " & (UBound(powerLevels) + 1), vbInformation, "Готово"
+
+On Error Resume Next
+xl.DisplayAlerts = True
+On Error GoTo 0
+
