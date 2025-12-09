@@ -34,18 +34,13 @@ If IsNumeric(tInput) Then
     ' Устанавливаем длительность в сценарии
     Call SetShortCircuitDuration(tClear)
     
-    ' Сохраняем файл (пробуем разные варианты)
-    On Error Resume Next
-    saveRes = Rastr.Save(Rastr.fileName, "")
-    If Err.Number <> 0 Then
-        saveRes = -1
-    End If
-    On Error GoTo 0
+    ' Сохраняем только таблицу сценария
+    saveRes = Rastr.Tables("DFWAutoActionScn").Save()
     
     If saveRes = 0 Then
         MsgBox "Длительность КЗ установлена: " & tClear & " мс" & vbCrLf & "Сценарий сохранен."
     Else
-        MsgBox "Длительность КЗ установлена: " & tClear & " мс" & vbCrLf & "Для сохранения используйте Файл -> Сохранить в меню RastrWin3."
+        MsgBox "Ошибка сохранения сценария: " & saveRes
     End If
 Else
     MsgBox "Неверный ввод времени."
