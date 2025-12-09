@@ -16,6 +16,25 @@ wsLog.Name = "Логи"
 
 Dim resultRow: resultRow = 1
 
+' --- Ввод узла КЗ ---
+Dim kzNode: kzNode = InputBox("Введите номер узла КЗ:", "Узел КЗ", "1")
+If Not IsNumeric(kzNode) Then kzNode = 1
+kzNode = CLng(kzNode)
+
+' --- Создание сценария с КЗ ---
+Set tblEvents = Rastr.Tables("DFWAutoActionScn")
+If Not tblEvents Is Nothing Then
+    tblEvents.Size = 1
+    Set colType = tblEvents.Cols("Type")
+    Set colNode = tblEvents.Cols("Node")
+    Set colDT = tblEvents.Cols("DT")
+    If Not colType Is Nothing And Not colNode Is Nothing And Not colDT Is Nothing Then
+        colType.Z(0) = "КЗ"
+        colNode.Z(0) = kzNode
+        colDT.Z(0) = 1.0
+    End If
+End If
+
 ' --- Rastr таблицы ---
 Set spBranch = Rastr.Tables("vetv")
 Set spNode   = Rastr.Tables("node")
@@ -112,7 +131,7 @@ Function GetMaxDelta()
         npoints = 0
 
         ' Пробуем snapIdx от 5 до 0
-        For snapIdx = 5 To 0 Step -1
+        For snapIdx = 100 To 0 Step -1
             On Error Resume Next
             Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
             errNum = Err.Number
@@ -204,19 +223,15 @@ Function GetGenMaxDelta(genIndex)
 End Function
 
 ' --- Функция установки времени отключения КЗ ---
-' Примечание: механизм изменения времени отключения КЗ может отличаться
-' в зависимости от версии Rastr и структуры сценария
 Sub SetShortCircuitClearingTime(tClear)
     On Error Resume Next
-    ' Пробуем установить через свойство FWDynamic
-    spFWDynamic.TimeClear = tClear
-    ' Альтернативные варианты (раскомментировать при необходимости):
-    ' spFWDynamic.Params("TimeClear") = tClear
-    ' Или через таблицу событий динамики:
-    ' Set tblEvents = Rastr.Tables("Event")
-    ' If Not tblEvents Is Nothing Then
-    '     ' Найти событие КЗ и изменить время отключения
-    ' End If
+    Set tblEvents = Rastr.Tables("DFWAutoActionScn")
+    If Not tblEvents Is Nothing Then
+        Set colDT = tblEvents.Cols("DT")
+        If Not colDT Is Nothing Then
+            colDT.Z(0) = tClear
+        End If
+    End If
     On Error GoTo 0
 End Sub
 
