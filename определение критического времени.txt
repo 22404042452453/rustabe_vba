@@ -393,14 +393,19 @@ powerLevels(4) = 100
 For pIdx = 0 To UBound(powerLevels)
     powerLevel = powerLevels(pIdx)
     
+    Dim tCriticalForRows
+
+For pIdx = 0 To UBound(powerLevels)
+    powerLevel = powerLevels(pIdx)
+    
     ' Устанавливаем генерацию для текущего уровня мощности
     For idx = 0 To UBound(selectedNodeIndices)
         nodeIdx = selectedNodeIndices(idx)
         spNodePg.Z(nodeIdx) = basePgValues(idx) * powerLevel / 100.0
     Next
     
-    ' ИСПРАВЛЕНИЕ: явно объявляем переменную как String
-    Dim tCriticalForRows: tCriticalForRows = ""
+    ' Сбрасываем значение для текущей итерации
+    tCriticalForRows = ""
     
     ' Пересчитываем установившийся режим
     urRes = SolveUR()
@@ -431,10 +436,11 @@ For pIdx = 0 To UBound(powerLevels)
             
             If anyViolation Then
                 ' Нарушение устойчивости - используем двоичный поиск (по системе)
+                Dim tCritical
                 tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedNodeIndices)
-                If tCritical >= 0 Then
-                    ' ИСПРАВЛЕНИЕ: явное преобразование в строку
-                    tCriticalForRows = CStr(FormatNumber(tCritical, 3))
+                If IsNumeric(tCritical) And tCritical >= 0 Then
+                    ' ИСПРАВЛЕНИЕ: безопасное преобразование
+                    tCriticalForRows = FormatNumber(CDbl(tCritical), 3)
                 Else
                     tCriticalForRows = "Ошибка поиска"
                 End If
