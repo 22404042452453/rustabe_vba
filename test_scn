@@ -1,37 +1,44 @@
-' Скрипт для изменения времени отключения КЗ в сценарии и сохранения
+' Скрипт для изменения длительности КЗ в сценарии и сохранения
 
-' Функция установки времени отключения КЗ
-Sub SetShortCircuitClearingTime(tClear)
+' Функция установки длительности КЗ
+Sub SetShortCircuitDuration(tClear)
     On Error Resume Next
-    Set tblEvents = Rastr.Tables("DWFAutoActionScn")
+    
+    Set tblEvents = Rastr.Tables("DFWAutoActionScn")
+    
     If Not tblEvents Is Nothing Then
         Set colType = tblEvents.Cols("Type")
-        Set colOtkl = tblEvents.Cols("Шунт Z")
-        If Not colType Is Nothing And Not colOtkl Is Nothing Then
+        Set colDT = tblEvents.Cols("DT")  ' Длительность действия
+        
+        If Not colType Is Nothing And Not colDT Is Nothing Then
             For i = 0 To tblEvents.Size - 1
+                ' Ищем действие типа "КЗ"
                 If colType.ZS(i) = "КЗ" Then
-                    colOtkl.Z(i) = tClear
-                    Exit For
+                    ' Устанавливаем длительность КЗ в мс
+                    colDT.Z(i) = tClear
+                    Exit For  ' Обрабатываем только первое КЗ
                 End If
             Next
         End If
     End If
+    
     On Error GoTo 0
 End Sub
 
 ' Основная логика
-tInput = InputBox("Введите время отключения КЗ (мс):", "Изменение времени", "500")
+tInput = InputBox("Введите длительность КЗ (мс):", "Изменение времени", "500")
 
 If IsNumeric(tInput) Then
     tClear = CDbl(tInput)
-
-    ' Устанавливаем время в сценарии
-    Call SetShortCircuitClearingTime(tClear)
-
+    
+    ' Устанавливаем длительность в сценарии
+    Call SetShortCircuitDuration(tClear)
+    
     ' Сохраняем сценарий
     saveRes = Rastr.Save()
+    
     If saveRes = 0 Then
-        MsgBox "Время отключения КЗ установлено: " & tClear & " мс" & vbCrLf & "Сценарий сохранен."
+        MsgBox "Длительность КЗ установлена: " & tClear & " мс" & vbCrLf & "Сценарий сохранен."
     Else
         MsgBox "Ошибка сохранения сценария: " & saveRes
     End If
