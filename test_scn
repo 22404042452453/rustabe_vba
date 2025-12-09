@@ -1,5 +1,7 @@
-' Скрипт для просмотра всех данных действий в сценарии
-Sub ShowAllActionData()
+' Скрипт для изменения длительности действия "Шунт Z"
+
+' Функция установки длительности
+Sub SetShuntDuration(tClear)
     On Error Resume Next
     
     Set tblEvents = Rastr.Tables("DFWAutoActionScn")
@@ -7,45 +9,31 @@ Sub ShowAllActionData()
     If Not tblEvents Is Nothing Then
         Set colType = tblEvents.Cols("Type")
         Set colName = tblEvents.Cols("Name")
-        Set colTimeStart = tblEvents.Cols("TimeStart")
         Set colDT = tblEvents.Cols("DT")
-        Set colObjectClass = tblEvents.Cols("ObjectClass")
-        Set colObjectProp = tblEvents.Cols("ObjectProp")
         
-        Dim msg
-        msg = "Действия в сценарии:" & vbCrLf & vbCrLf
-        
-        For i = 0 To tblEvents.Size - 1
-            msg = msg & "Строка " & i & ":" & vbCrLf
-            msg = msg & "  Тип = '" & colType.ZS(i) & "'" & vbCrLf
-            msg = msg & "  Название = '" & colName.ZS(i) & "'" & vbCrLf
-            
-            If Not colTimeStart Is Nothing Then
-                msg = msg & "  TimeStart = " & colTimeStart.Z(i) & " с" & vbCrLf
-            End If
-            
-            If Not colDT Is Nothing Then
-                msg = msg & "  DT (Длительность) = " & colDT.Z(i) & " мс" & vbCrLf
-            End If
-            
-            If Not colObjectClass Is Nothing Then
-                msg = msg & "  ObjectClass = '" & colObjectClass.ZS(i) & "'" & vbCrLf
-            End If
-            
-            If Not colObjectProp Is Nothing Then
-                msg = msg & "  ObjectProp = '" & colObjectProp.ZS(i) & "'" & vbCrLf
-            End If
-            
-            msg = msg & vbCrLf
-        Next
-        
-        MsgBox msg
-    Else
-        MsgBox "Таблица DFWAutoActionScn не найдена"
+        If Not colType Is Nothing And Not colDT Is Nothing Then
+            ' Ищем действие типа "Объект" с названием, содержащим "Шунт Z"
+            For i = 0 To tblEvents.Size - 1
+                If colType.ZS(i) = "Объект" And InStr(colName.ZS(i), "Шунт Z") > 0 Then
+                    ' Устанавливаем длительность в мс
+                    colDT.Z(i) = tClear
+                    MsgBox "Длительность установлена: " & tClear & " мс" & vbCrLf & _
+                           "Для действия: " & colName.ZS(i)
+                    Exit For
+                End If
+            Next
+        End If
     End If
     
     On Error GoTo 0
 End Sub
 
-' Запускаем
-Call ShowAllActionData()
+' Основная логика
+tInput = InputBox("Введите длительность (мс):", "Изменение длительности", "1")
+
+If IsNumeric(tInput) Then
+    tClear = CDbl(tInput)
+    Call SetShuntDuration(tClear)
+Else
+    MsgBox "Неверный ввод времени."
+End If
