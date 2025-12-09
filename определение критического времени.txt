@@ -289,48 +289,42 @@ For pIdx = 0 To UBound(powerLevels)
     
     ' Пересчитываем установившийся режим
     urRes = SolveUR()
-    If urRes <> 0 Then
+    If urRes = 0 Then
+        ' Запускаем динамику с исходным временем отключения КЗ
+        dynRes = spFWDynamic.Run()
+        If dynRes = 0 Then
+            ' Проверяем нарушение устойчивости
+            If CheckStabilityViolation() Then
+                ' Нарушение устойчивости - используем двоичный поиск
+                tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedNodeIndices)
+                
+                If tCritical >= 0 Then
+                    wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+                    wsResult.Cells(resultRow, 2).Value = FormatNumber(tCritical, 3)
+                    wsResult.Cells(resultRow, 3).Value = "Нарушение устойчивости"
+                Else
+                    wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+                    wsResult.Cells(resultRow, 2).Value = "Ошибка поиска"
+                    wsResult.Cells(resultRow, 3).Value = "Ошибка определения критического времени"
+                End If
+            Else
+                ' Устойчивость сохранена - критическое время = максимальное (или не определено)
+                wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+                wsResult.Cells(resultRow, 2).Value = "> 1.0"  ' Или максимальное время
+                wsResult.Cells(resultRow, 3).Value = "Устойчивость сохранена"
+            End If
+        Else
+            wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+            wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта динамики"
+            wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & dynRes & ")"
+        End If
+    Else
         wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
         wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта УР"
         wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & urRes & ")"
-        resultRow = resultRow + 1
-        GoTo NextPowerLevel
-    End If
-    
-    ' Запускаем динамику с исходным временем отключения КЗ
-    dynRes = spFWDynamic.Run()
-    If dynRes <> 0 Then
-        wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-        wsResult.Cells(resultRow, 2).Value = "Ошибка расчёта динамики"
-        wsResult.Cells(resultRow, 3).Value = "Ошибка (код " & dynRes & ")"
-        resultRow = resultRow + 1
-        GoTo NextPowerLevel
-    End If
-    
-    ' Проверяем нарушение устойчивости
-    If CheckStabilityViolation() Then
-        ' Нарушение устойчивости - используем двоичный поиск
-        tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedNodeIndices)
-        
-        If tCritical >= 0 Then
-            wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-            wsResult.Cells(resultRow, 2).Value = FormatNumber(tCritical, 3)
-            wsResult.Cells(resultRow, 3).Value = "Нарушение устойчивости"
-        Else
-            wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-            wsResult.Cells(resultRow, 2).Value = "Ошибка поиска"
-            wsResult.Cells(resultRow, 3).Value = "Ошибка определения критического времени"
-        End If
-    Else
-        ' Устойчивость сохранена - критическое время = максимальное (или не определено)
-        wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-        wsResult.Cells(resultRow, 2).Value = "> 1.0"  ' Или максимальное время
-        wsResult.Cells(resultRow, 3).Value = "Устойчивость сохранена"
     End If
     
     resultRow = resultRow + 1
-    
-NextPowerLevel:
 Next
 
 ' Восстанавливаем исходные значения генерации
