@@ -390,10 +390,13 @@ powerLevels(2) = 80
 powerLevels(3) = 90
 powerLevels(4) = 100
 
-For pIdx = 0 To UBound(powerLevels)
-    powerLevel = powerLevels(pIdx)
-    
-    Dim tCriticalForRows
+' ИСПРАВЛЕНИЕ: объявляем переменные ДО цикла
+Dim tCriticalForRows
+Dim genMaxDeltas()
+Dim anyViolation
+Dim tCritical
+Dim g, genIdx, genName
+Dim maxDelta, stableNow, statusBase
 
 For pIdx = 0 To UBound(powerLevels)
     powerLevel = powerLevels(pIdx)
@@ -413,10 +416,9 @@ For pIdx = 0 To UBound(powerLevels)
         ' Запускаем динамику с исходным временем отключения КЗ
         dynRes = spFWDynamic.Run()
         If dynRes = 0 Then
-            ' Пер-генераторные MaxDelta
-            Dim genMaxDeltas()
+            ' Пер-генераторные MaxDelta - пересоздаём массив для текущей итерации
             ReDim genMaxDeltas(UBound(selectedGenIndices))
-            Dim anyViolation: anyViolation = False
+            anyViolation = False
             For g = 0 To UBound(selectedGenIndices)
                 genIdx = selectedGenIndices(g)
                 genMaxDeltas(g) = GetGenMaxDelta(genIdx)
@@ -426,7 +428,7 @@ For pIdx = 0 To UBound(powerLevels)
             ' Системный максимум для лога/бинарного поиска
             maxDelta = GetMaxDelta()
             stableNow = (maxDelta <= 180)
-            Dim statusBase
+            statusBase = ""
             If stableNow Then
                 statusBase = "устойчив"
             Else
@@ -436,7 +438,6 @@ For pIdx = 0 To UBound(powerLevels)
             
             If anyViolation Then
                 ' Нарушение устойчивости - используем двоичный поиск (по системе)
-                Dim tCritical
                 tCritical = BinarySearchCriticalTime(powerLevel, originalGenValues, selectedNodeIndices)
                 If IsNumeric(tCritical) And tCritical >= 0 Then
                     ' ИСПРАВЛЕНИЕ: безопасное преобразование
