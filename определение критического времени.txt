@@ -168,7 +168,7 @@ Function GetGenMaxDelta(genIndex)
     wsData.Cells.Clear
 
     ' Пробуем snapIdx от 5 до 0
-    For snapIdx = 500 To 0 Step -1
+    For snapIdx = 5 To 0 Step -1
         On Error Resume Next
         Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, snapIdx)
         errNum = Err.Number
@@ -226,8 +226,8 @@ End Sub
 Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     ' Параметры двоичного поиска
     Dim tMin: tMin = 0.0
-    Dim tMax: tMax = 1.0  ' Максимальное время отключения КЗ (сек)
-    Dim epsilon: epsilon = 0.01  ' Точность поиска
+    Dim tMax: tMax = 1000.0  ' Максимальное время отключения КЗ (мс)
+    Dim epsilon: epsilon = 10.0  ' Точность поиска
     Dim tCritical: tCritical = -1
     Dim maxIterations: maxIterations = 50  ' Защита от бесконечного цикла
     Dim iteration: iteration = 0
@@ -291,7 +291,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
         BinarySearchCriticalTime = 0.0
         Exit Function
     End If
-    
+
     ' Двоичный поиск: ищем границу между устойчивостью и нарушением
     Do While (tMax - tMin) > epsilon And iteration < maxIterations
         iteration = iteration + 1
@@ -399,7 +399,7 @@ wsResult.Cells(resultRow, 1).Value = "Уровень мощности (%)"
 wsResult.Cells(resultRow, 2).Value = "Генератор"
 wsResult.Cells(resultRow, 3).Value = "Max Delta"
 wsResult.Cells(resultRow, 4).Value = "Статус"
-wsResult.Cells(resultRow, 5).Value = "Критическое время отключения КЗ (сек)"
+wsResult.Cells(resultRow, 5).Value = "Критическое время отключения КЗ (мс)"
 wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 5)).Font.Bold = True
 resultRow = resultRow + 1
 
@@ -481,7 +481,7 @@ For pIdx = 0 To UBound(powerLevels)
                     tCriticalForRows = "Ошибка поиска"
                 End If
             Else
-                tCriticalForRows = "> 1.0"
+                tCriticalForRows = "> 1000.0"
             End If
             
             ' Записываем по каждому генератору
