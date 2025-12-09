@@ -1,5 +1,5 @@
-' Скрипт для просмотра всех типов действий в сценарии
-Sub ShowAllActionTypes()
+' Скрипт для просмотра всех данных действий в сценарии
+Sub ShowAllActionData()
     On Error Resume Next
     
     Set tblEvents = Rastr.Tables("DFWAutoActionScn")
@@ -7,21 +7,39 @@ Sub ShowAllActionTypes()
     If Not tblEvents Is Nothing Then
         Set colType = tblEvents.Cols("Type")
         Set colName = tblEvents.Cols("Name")
+        Set colTimeStart = tblEvents.Cols("TimeStart")
+        Set colDT = tblEvents.Cols("DT")
+        Set colObjectClass = tblEvents.Cols("ObjectClass")
+        Set colObjectProp = tblEvents.Cols("ObjectProp")
         
-        If Not colType Is Nothing Then
-            Dim msg
-            msg = "Действия в сценарии:" & vbCrLf & vbCrLf
+        Dim msg
+        msg = "Действия в сценарии:" & vbCrLf & vbCrLf
+        
+        For i = 0 To tblEvents.Size - 1
+            msg = msg & "Строка " & i & ":" & vbCrLf
+            msg = msg & "  Тип = '" & colType.ZS(i) & "'" & vbCrLf
+            msg = msg & "  Название = '" & colName.ZS(i) & "'" & vbCrLf
             
-            For i = 0 To tblEvents.Size - 1
-                msg = msg & "Строка " & i & ": Тип = '" & colType.ZS(i) & "'"
-                If Not colName Is Nothing Then
-                    msg = msg & ", Название = '" & colName.ZS(i) & "'"
-                End If
-                msg = msg & vbCrLf
-            Next
+            If Not colTimeStart Is Nothing Then
+                msg = msg & "  TimeStart = " & colTimeStart.Z(i) & " с" & vbCrLf
+            End If
             
-            MsgBox msg
-        End If
+            If Not colDT Is Nothing Then
+                msg = msg & "  DT (Длительность) = " & colDT.Z(i) & " мс" & vbCrLf
+            End If
+            
+            If Not colObjectClass Is Nothing Then
+                msg = msg & "  ObjectClass = '" & colObjectClass.ZS(i) & "'" & vbCrLf
+            End If
+            
+            If Not colObjectProp Is Nothing Then
+                msg = msg & "  ObjectProp = '" & colObjectProp.ZS(i) & "'" & vbCrLf
+            End If
+            
+            msg = msg & vbCrLf
+        Next
+        
+        MsgBox msg
     Else
         MsgBox "Таблица DFWAutoActionScn не найдена"
     End If
@@ -30,4 +48,4 @@ Sub ShowAllActionTypes()
 End Sub
 
 ' Запускаем
-Call ShowAllActionTypes()
+Call ShowAllActionData()
