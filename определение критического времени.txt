@@ -16,25 +16,6 @@ wsLog.Name = "Логи"
 
 Dim resultRow: resultRow = 1
 
-' --- Ввод узла КЗ ---
-Dim kzNode: kzNode = InputBox("Введите номер узла КЗ:", "Узел КЗ", "1")
-If Not IsNumeric(kzNode) Then kzNode = 1
-kzNode = CLng(kzNode)
-
-' --- Создание сценария с КЗ ---
-Set tblEvents = Rastr.Tables("DFWAutoActionScn")
-If Not tblEvents Is Nothing Then
-    tblEvents.Size = 1
-    Set colType = tblEvents.Cols("Type")
-    Set colNode = tblEvents.Cols("Node")
-    Set colDT = tblEvents.Cols("DT")
-    If Not colType Is Nothing And Not colNode Is Nothing And Not colDT Is Nothing Then
-        colType.Z(0) = "КЗ"
-        colNode.Z(0) = kzNode
-        colDT.Z(0) = 1.0
-    End If
-End If
-
 ' --- Rastr таблицы ---
 Set spBranch = Rastr.Tables("vetv")
 Set spNode   = Rastr.Tables("node")
@@ -131,7 +112,7 @@ Function GetMaxDelta()
         npoints = 0
 
         ' Пробуем snapIdx от 5 до 0
-        For snapIdx = 100 To 0 Step -1
+        For snapIdx = 500 To 0 Step -1
             On Error Resume Next
             Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
             errNum = Err.Number
@@ -227,9 +208,15 @@ Sub SetShortCircuitClearingTime(tClear)
     On Error Resume Next
     Set tblEvents = Rastr.Tables("DFWAutoActionScn")
     If Not tblEvents Is Nothing Then
-        Set colDT = tblEvents.Cols("DT")
-        If Not colDT Is Nothing Then
-            colDT.Z(0) = tClear
+        Set colType = tblEvents.Cols("Type")
+        Set colOtkl = tblEvents.Cols("Откл")
+        If Not colType Is Nothing And Not colOtkl Is Nothing Then
+            For i = 0 To tblEvents.Size - 1
+                If colType.ZS(i) = "КЗ" Then
+                    colOtkl.Z(i) = tClear
+                    Exit For
+                End If
+            Next
         End If
     End If
     On Error GoTo 0
