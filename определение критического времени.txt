@@ -203,22 +203,29 @@ Function GetGenMaxDelta(genIndex)
     GetGenMaxDelta = maxDelta
 End Function
 
-' --- Функция установки времени отключения КЗ ---
-Sub SetShortCircuitClearingTime(tClear)
+' --- Функция установки длительности действия "Шунт Z" ---
+Sub SetShuntDuration(tClear)
     On Error Resume Next
+
     Set tblEvents = Rastr.Tables("DFWAutoActionScn")
+
     If Not tblEvents Is Nothing Then
         Set colType = tblEvents.Cols("Type")
-        Set colOtkl = tblEvents.Cols("Откл")
-        If Not colType Is Nothing And Not colOtkl Is Nothing Then
+        Set colName = tblEvents.Cols("Name")
+        Set colDT = tblEvents.Cols("DT")
+
+        If Not colType Is Nothing And Not colDT Is Nothing Then
+            ' Ищем действие типа "Объект" с названием, содержащим "Шунт Z"
             For i = 0 To tblEvents.Size - 1
-                If colType.ZS(i) = "КЗ" Then
-                    colOtkl.Z(i) = tClear
+                If colType.ZS(i) = "Объект" And InStr(colName.ZS(i), "Шунт Z") > 0 Then
+                    ' Устанавливаем длительность в мс
+                    colDT.Z(i) = tClear
                     Exit For
                 End If
             Next
         End If
     End If
+
     On Error GoTo 0
 End Sub
 
@@ -244,7 +251,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     End If
 
     ' Проверка при tMin (быстрое отключение - должно быть НЕУСТОЙЧИВО)
-    Call SetShortCircuitClearingTime(tMin)
+    Call SetShuntDuration(tMin)
     dynRes = spFWDynamic.Run()
     If dynRes <> 0 Then
         BinarySearchCriticalTime = -1
@@ -274,7 +281,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
         Exit Function
     End If
 
-    Call SetShortCircuitClearingTime(tMax)
+    Call SetShuntDuration(tMax)
     dynRes = spFWDynamic.Run()
     If dynRes <> 0 Then
         BinarySearchCriticalTime = -1
@@ -319,7 +326,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
             Exit Function
         End If
 
-        Call SetShortCircuitClearingTime(tMid)
+        Call SetShuntDuration(tMid)
 
         dynRes = spFWDynamic.Run()
         If dynRes <> 0 Then
