@@ -124,7 +124,7 @@ Function GetMaxDelta()
         Plot = Empty
         npoints = 0
         
-        For snapIdx = 5 To 0 Step -1
+        For snapIdx = 100 To 0 Step -1
             On Error Resume Next
             Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
             errNum = Err.Number
@@ -165,7 +165,7 @@ Function GetGenMaxDelta(genIndex)
     npoints = 0
     wsData.Cells.Clear
     
-    For snapIdx = 5 To 0 Step -1
+    For snapIdx = 100 To 0 Step -1
         On Error Resume Next
         Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, snapIdx)
         errNum = Err.Number
@@ -283,9 +283,9 @@ End Function
 
 ' --- Функция двоичного поиска ---
 Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
-    Dim tMin: tMin = 0.0
+    Dim tMin: tMin = 100
     Dim tMax: tMax = 1000.0
-    Dim epsilon: epsilon = 5.0
+    Dim epsilon: epsilon = 2.0
     Dim tCritical: tCritical = -1
     Dim maxIterations: maxIterations = 50
     Dim iteration: iteration = 0
@@ -582,3 +582,4 @@ For pIdx = 0 To UBound(powerLevels)
 Next
 
 MsgBox "Расчёт завершён! Результаты в Excel.", vbInformation, "Готово"
+
