@@ -583,7 +583,7 @@ For pIdx = 0 To UBound(powerLevels)
             Call ReloadDynamicScenario()
             ' Запускаем динамику
             dynRes = spFWDynamic.Run()
-        If dynRes = 0 Then
+            If dynRes = 0 Then
             ReDim genMaxDeltas(UBound(selectedGenIndices))
             anyViolation = False
             For g = 0 To UBound(selectedGenIndices)
