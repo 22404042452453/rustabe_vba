@@ -1,100 +1,46 @@
-' --- Скрипт для программного создания КЗ в узле ---
-' Глобальная переменная - индекс созданного события
-Dim g_ScenarioRowIndex: g_ScenarioRowIndex = -1
+' --- Скрипт для отладки: Вывод структуры таблицы DFWAutoActionScn ---
 
-' --- Функция создания/изменения КЗ в узле ---
-Function CreateOrUpdateKZ(nodeNumber, tStart, tClear)
-    On Error Resume Next
+Set tblEvents = Rastr.Tables("DFWAutoActionScn")
+
+If tblEvents Is Nothing Then
+    MsgBox "Ошибка: Таблица DFWAutoActionScn не найдена!" & vbCrLf & _
+           "Возможно, нужно использовать другое имя таблицы.", vbCritical
+    WScript.Quit
+End If
+
+' Выводим все колонки таблицы
+Dim colInfo: colInfo = "Колонки таблицы DFWAutoActionScn:" & vbCrLf & vbCrLf
+
+Set cols = tblEvents.Cols
+For i = 0 To cols.Count - 1
+    Set col = cols.Item(i)
+    colInfo = colInfo & "Колонка " & i & ": " & col.Name & vbCrLf
+Next
+
+colInfo = colInfo & vbCrLf & "Всего колонок: " & cols.Count & vbCrLf
+colInfo = colInfo & "Всего строк: " & tblEvents.Size
+
+MsgBox colInfo, vbInformation, "Структура таблицы"
+
+' Если есть строки - выводим пример первой строки
+If tblEvents.Size > 0 Then
+    Dim rowInfo: rowInfo = "Пример первой строки:" & vbCrLf & vbCrLf
     
-    Set tblEvents = Rastr.Tables("DFWAutoActionScn")
-    
-    If tblEvents Is Nothing Then
-        MsgBox "Ошибка: Таблица DFWAutoActionScn не найдена!", vbCritical
-        CreateOrUpdateKZ = False
-        Exit Function
-    End If
-    
-    Set colType = tblEvents.Cols("Type")
-    Set colName = tblEvents.Cols("Name")
-    Set colT = tblEvents.Cols("T")
-    Set colDT = tblEvents.Cols("DT")
-    Set colNode = tblEvents.Cols("Node")
-    
-    If colType Is Nothing Or colDT Is Nothing Or colNode Is Nothing Then
-        MsgBox "Ошибка: Не найдены необходимые колонки!", vbCritical
-        CreateOrUpdateKZ = False
-        Exit Function
-    End If
-    
-    ' Если событие уже создано - просто меняем время
-    If g_ScenarioRowIndex >= 0 And g_ScenarioRowIndex < tblEvents.Size Then
-        If colName.ZS(g_ScenarioRowIndex) = "КЗ программное" Then
-            colT.Z(g_ScenarioRowIndex) = tStart
-            colDT.Z(g_ScenarioRowIndex) = tClear
-            colNode.Z(g_ScenarioRowIndex) = nodeNumber
-            CreateOrUpdateKZ = True
-            Exit Function
+    For i = 0 To cols.Count - 1
+        Set col = cols.Item(i)
+        On Error Resume Next
+        Dim val
+        val = col.ZS(0)
+        If Err.Number <> 0 Then
+            val = col.Z(0)
         End If
-    End If
-    
-    ' Ищем существующее событие "КЗ программное"
-    For i = 0 To tblEvents.Size - 1
-        If colType.ZS(i) = "Объект" And colName.ZS(i) = "КЗ программное" Then
-            g_ScenarioRowIndex = i
-            colT.Z(i) = tStart
-            colDT.Z(i) = tClear
-            colNode.Z(i) = nodeNumber
-            CreateOrUpdateKZ = True
-            Exit Function
+        If Err.Number = 0 Then
+            rowInfo = rowInfo & col.Name & " = " & val & vbCrLf
+        Else
+            rowInfo = rowInfo & col.Name & " = [недоступно]" & vbCrLf
         End If
+        On Error GoTo 0
     Next
     
-    ' Создаём новое событие КЗ
-    newRow = tblEvents.AddRow()
-    g_ScenarioRowIndex = newRow
-    
-    ' Заполняем параметры
-    colType.ZS(newRow) = "Объект"
-    colName.ZS(newRow) = "КЗ программное"
-    colT.Z(newRow) = tStart        ' Момент возникновения КЗ (мс)
-    colDT.Z(newRow) = tClear       ' Длительность КЗ (мс)
-    colNode.Z(newRow) = nodeNumber ' Номер узла КЗ
-    
-    CreateOrUpdateKZ = True
-    On Error GoTo 0
-End Function
-
-' --- Основная логика ---
-' Запрашиваем параметры КЗ
-nodeInput = InputBox("Введите номер узла КЗ:", "Параметры КЗ", "1")
-If Not IsNumeric(nodeInput) Then
-    MsgBox "Неверный номер узла."
-    WScript.Quit
-End If
-
-tStartInput = InputBox("Введите время возникновения КЗ (мс):", "Параметры КЗ", "100")
-If Not IsNumeric(tStartInput) Then
-    MsgBox "Неверное время возникновения."
-    WScript.Quit
-End If
-
-tClearInput = InputBox("Введите длительность КЗ (мс):", "Параметры КЗ", "150")
-If Not IsNumeric(tClearInput) Then
-    MsgBox "Неверная длительность КЗ."
-    WScript.Quit
-End If
-
-' Создаём/обновляем КЗ
-nodeNum = CInt(nodeInput)
-tStart = CDbl(tStartInput)
-tClear = CDbl(tClearInput)
-
-If CreateOrUpdateKZ(nodeNum, tStart, tClear) Then
-    MsgBox "КЗ создано!" & vbCrLf & _
-           "Узел: " & nodeNum & vbCrLf & _
-           "Время возникновения: " & tStart & " мс" & vbCrLf & _
-           "Длительность: " & tClear & " мс" & vbCrLf & _
-           "Индекс строки: " & g_ScenarioRowIndex
-Else
-    MsgBox "Ошибка создания КЗ!", vbCritical
+    MsgBox rowInfo, vbInformation, "Первая строка"
 End If
