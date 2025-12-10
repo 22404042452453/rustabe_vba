@@ -316,7 +316,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     End If
 
     Dim maxDeltaMin: maxDeltaMin = GetMaxDelta()
-    Dim stableAtMin: stableAtMin = (maxDeltaMin <= 180)
+    Dim stableAtMin: stableAtMin = (maxDeltaMin <= 360)
     Dim statusMin: If stableAtMin Then statusMin = "устойчив" Else statusMin = "нарушен"
     Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDeltaMin, statusMin, dynRes, lastSnapIdx)
 
@@ -352,7 +352,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     End If
 
     Dim maxDeltaMax: maxDeltaMax = GetMaxDelta()
-    Dim unstableAtMax: unstableAtMax = (maxDeltaMax > 180)
+    Dim unstableAtMax: unstableAtMax = (maxDeltaMax > 360)
     Dim statusMax: If unstableAtMax Then statusMax = "нарушен" Else statusMax = "устойчив"
     Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDeltaMax, statusMax, dynRes, lastSnapIdx)
 
@@ -393,7 +393,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
         End If
 
         Dim maxDeltaMid: maxDeltaMid = GetMaxDelta()
-        Dim stableNow: stableNow = (maxDeltaMid <= 180)
+        Dim stableNow: stableNow = (maxDeltaMid <= 360)
         Dim statusNow: If stableNow Then statusNow = "устойчив" Else statusNow = "нарушен"
         Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDeltaMid, statusNow, dynRes, lastSnapIdx)
 
@@ -521,11 +521,11 @@ For pIdx = 0 To UBound(powerLevels)
                 For g = 0 To UBound(selectedGenIndices)
                     genIdx = selectedGenIndices(g)
                     genMaxDeltas(g) = GetGenMaxDelta(genIdx)
-                    If genMaxDeltas(g) > 180 Then anyViolation = True
+                    If genMaxDeltas(g) > 360 Then anyViolation = True
                 Next
-                
+
                 maxDelta = GetMaxDelta()
-                stableNow = (maxDelta <= 180)
+                stableNow = (maxDelta <= 360)
                 If stableNow Then statusBase = "устойчив" Else statusBase = "нарушен"
                 Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, statusBase, dynRes, lastSnapIdx)
 
@@ -552,7 +552,7 @@ For pIdx = 0 To UBound(powerLevels)
                     wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
                     wsResult.Cells(resultRow, 2).Value = genName
                     wsResult.Cells(resultRow, 3).Value = FormatNumber(genMaxDeltas(g), 3)
-                    If genMaxDeltas(g) > 180 Then
+                    If genMaxDeltas(g) > 360 Then
                         wsResult.Cells(resultRow, 4).Value = "Нарушение устойчивости"
                     Else
                         wsResult.Cells(resultRow, 4).Value = "Устойчивость сохранена"
