@@ -1,522 +1,100 @@
-' --- Определение критического времени отключения КЗ (ИСПРАВЛЕНО) ---
-' Ключевые исправления:
-' 1. Добавлено восстановление установившегося режима перед каждым расчётом динамики
-' 2. Исправлена логика двоичного поиска
-' 3. Добавлена очистка состояния динамики
+' --- Скрипт для программного создания КЗ в узле ---
+' Глобальная переменная - индекс созданного события
+Dim g_ScenarioRowIndex: g_ScenarioRowIndex = -1
 
-' --- Инициализация Excel ---
-Set xl = CreateObject("Excel.Application")
-xl.Visible = True
-xl.DisplayAlerts = False
-Set wb = xl.Workbooks.Add
-Set wsData = wb.Worksheets(1)
-wsData.Name = "Данные"
-Set wsResult = wb.Worksheets.Add
-wsResult.Name = "Результаты"
-Set wsLog = wb.Worksheets.Add
-wsLog.Name = "Логи"
-
-Dim resultRow: resultRow = 1
-
-' --- Rastr таблицы ---
-Set spBranch = Rastr.Tables("vetv")
-Set spNode   = Rastr.Tables("node")
-Set tblGen   = Rastr.Tables("Generator")
-
-If tblGen Is Nothing Then
-    MsgBox "Ошибка: Таблица Generator не найдена!", vbCritical, "Ошибка"
-    WScript.Quit
-End If
-
-' --- Получение колонок ---
-Set colGenName = tblGen.Cols("Name")
-Set colGenNy   = tblGen.Cols("Node")
-Set colGenSel  = tblGen.Cols("sel")
-Set colGenP    = tblGen.Cols("P")
-Set colGenPnom = tblGen.Cols("Pnom")
-
-If colGenName Is Nothing Or colGenNy Is Nothing Or colGenP Is Nothing Then
-    MsgBox "Ошибка: Не найдены необходимые колонки в таблице Generator!", vbCritical, "Ошибка"
-    WScript.Quit
-End If
-
-' Проверка наличия поля sel
-On Error Resume Next
-Set colGenSel = tblGen.Cols("sel")
-If Err.Number <> 0 Then
-    tblGen.Cols.Add "sel", PR_BOOL
-    tblGen.Cols("sel").Prop(FL_ZAG) = "Выбор"
-    Set colGenSel = tblGen.Cols("sel")
-    MsgBox "Добавлено поле sel. Выберите генераторы и запустите скрипт повторно.", vbInformation
-    WScript.Quit
-End If
-On Error GoTo 0
-
-' Получение колонок узлов
-Set spNodeNy = spNode.Cols("ny")
-Set spNodePg = spNode.Cols("pg")
-
-If spNodePg Is Nothing Then
-    MsgBox "Ошибка: Не найдена колонка генерации в таблице node!", vbCritical, "Ошибка"
-    WScript.Quit
-End If
-
-' --- Логирование ---
-Dim logRow: logRow = 1
-Sub LogBinaryStep(powerLevel, phase, iteration, tMin, tMid, tMax, maxDelta, statusText, dynCode, snapIdx)
-    wsLog.Cells(logRow, 1).Value = powerLevel
-    wsLog.Cells(logRow, 2).Value = phase
-    wsLog.Cells(logRow, 3).Value = iteration
-    wsLog.Cells(logRow, 4).Value = tMin
-    wsLog.Cells(logRow, 5).Value = tMid
-    wsLog.Cells(logRow, 6).Value = tMax
-    wsLog.Cells(logRow, 7).Value = maxDelta
-    wsLog.Cells(logRow, 8).Value = statusText
-    wsLog.Cells(logRow, 9).Value = dynCode
-    wsLog.Cells(logRow, 10).Value = snapIdx
-    logRow = logRow + 1
-End Sub
-
-' --- FWDynamic ---
-Set spFWDynamic = Rastr.FWDynamic
-If spFWDynamic Is Nothing Then
-    MsgBox "Ошибка: FWDynamic недоступен!", vbCritical, "Ошибка"
-    WScript.Quit
-End If
-
-Dim lastSnapIdx: lastSnapIdx = -1
-
-' --- КРИТИЧЕСКИ ВАЖНО: Функция восстановления УР ---
-Function RestoreSteadyState(selectedGenIndices, genPowerValues)
-    ' Восстанавливаем мощности генераторов
-    For idx = 0 To UBound(selectedGenIndices)
-        genIdx = selectedGenIndices(idx)
-        colGenP.Z(genIdx) = genPowerValues(idx)
-    Next
-    
-    ' Пересчитываем установившийся режим
-    RestoreSteadyState = Rastr.rgm("p")
-End Function
-
-' --- Функция пересчёта УР ---
-Function SolveUR()
-    SolveUR = Rastr.rgm("p")
-End Function
-
-' --- Функция получения MaxDelta ---
-Function GetMaxDelta()
-    Dim maxDelta: maxDelta = 0
-    lastSnapIdx = -1
-    wsData.Cells.Clear
-    
-    Dim dataCol: dataCol = 1
-    
-    For i = 0 To tblGen.Size - 1
-        Plot = Empty
-        npoints = 0
-        
-        ' Пробуем snapIdx от 5 до 0
-        For snapIdx = 5 To 0 Step -1
-            On Error Resume Next
-            Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
-            errNum = Err.Number
-            If errNum = 0 And IsArray(Plot) Then
-                npoints = UBound(Plot, 1) + 1
-                If npoints > 0 Then
-                    lastSnapIdx = snapIdx
-                    Exit For
-                End If
-            End If
-            On Error GoTo 0
-        Next
-        
-        If errNum = 0 And IsArray(Plot) And npoints > 0 Then
-            wsData.Cells(2, dataCol).Resize(npoints, 2).Value = Plot
-            
-            deltaStartAddr = wsData.Cells(2, dataCol).Address(False, False, 1, True)
-            deltaEndAddr = wsData.Cells(npoints + 1, dataCol).Address(False, False, 1, True)
-            deltaRange = deltaStartAddr & ":" & deltaEndAddr
-            
-            wsData.Cells(2, dataCol + 2).Formula = "=MAX(" & deltaRange & ")"
-            xl.Calculate
-            
-            maxGen = Abs(wsData.Cells(2, dataCol + 2).Value)
-            If maxGen > maxDelta Then maxDelta = maxGen
-            
-            dataCol = dataCol + 3
-        End If
-    Next
-    
-    GetMaxDelta = maxDelta
-End Function
-
-' --- MaxDelta для конкретного генератора ---
-Function GetGenMaxDelta(genIndex)
-    Dim maxDelta: maxDelta = 0
-    Plot = Empty
-    npoints = 0
-    wsData.Cells.Clear
-    
-    For snapIdx = 5 To 0 Step -1
-        On Error Resume Next
-        Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, snapIdx)
-        errNum = Err.Number
-        If errNum = 0 And IsArray(Plot) Then
-            npoints = UBound(Plot, 1) + 1
-            If npoints > 0 Then Exit For
-        End If
-        On Error GoTo 0
-    Next
-    
-    If errNum = 0 And IsArray(Plot) And npoints > 0 Then
-        wsData.Cells(2, 1).Resize(npoints, 2).Value = Plot
-        
-        deltaStartAddr = wsData.Cells(2, 1).Address(False, False, 1, True)
-        deltaEndAddr = wsData.Cells(npoints + 1, 1).Address(False, False, 1, True)
-        deltaRange = deltaStartAddr & ":" & deltaEndAddr
-        
-        wsData.Cells(2, 3).Formula = "=MAX(" & deltaRange & ")"
-        xl.Calculate
-        
-        maxDelta = Abs(wsData.Cells(2, 3).Value)
-    End If
-    
-    GetGenMaxDelta = maxDelta
-End Function
-
-' --- ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ функция установки длительности КЗ ---
-Sub SetShuntDuration(tClear)
+' --- Функция создания/изменения КЗ в узле ---
+Function CreateOrUpdateKZ(nodeNumber, tStart, tClear)
     On Error Resume Next
+    
     Set tblEvents = Rastr.Tables("DFWAutoActionScn")
     
-    If Not tblEvents Is Nothing Then
-        Set colType = tblEvents.Cols("Type")
-        Set colName = tblEvents.Cols("Name")
-        Set colDT = tblEvents.Cols("DT")
-        
-        If Not colType Is Nothing And Not colDT Is Nothing Then
-            For i = 0 To tblEvents.Size - 1
-                If colType.ZS(i) = "Объект" And InStr(colName.ZS(i), "Шунт Z") > 0 Then
-                    colDT.Z(i) = tClear
-                    Exit For
-                End If
-            Next
-        End If
+    If tblEvents Is Nothing Then
+        MsgBox "Ошибка: Таблица DFWAutoActionScn не найдена!", vbCritical
+        CreateOrUpdateKZ = False
+        Exit Function
     End If
-    On Error GoTo 0
-End Sub
-
-' --- КРИТИЧЕСКИ ВАЖНО: Функция перезагрузки сценария динамики ---
-Sub ReloadDynamicScenario()
-    On Error Resume Next
-    ' Метод 1: Попытка перезагрузить сценарий
-    spFWDynamic.LoadScenario()
     
-    ' Метод 2: Если LoadScenario не существует, пересоздаём объект
-    If Err.Number <> 0 Then
-        Err.Clear
-        Set spFWDynamic = Nothing
-        Set spFWDynamic = Rastr.FWDynamic
+    Set colType = tblEvents.Cols("Type")
+    Set colName = tblEvents.Cols("Name")
+    Set colT = tblEvents.Cols("T")
+    Set colDT = tblEvents.Cols("DT")
+    Set colNode = tblEvents.Cols("Node")
+    
+    If colType Is Nothing Or colDT Is Nothing Or colNode Is Nothing Then
+        MsgBox "Ошибка: Не найдены необходимые колонки!", vbCritical
+        CreateOrUpdateKZ = False
+        Exit Function
     End If
+    
+    ' Если событие уже создано - просто меняем время
+    If g_ScenarioRowIndex >= 0 And g_ScenarioRowIndex < tblEvents.Size Then
+        If colName.ZS(g_ScenarioRowIndex) = "КЗ программное" Then
+            colT.Z(g_ScenarioRowIndex) = tStart
+            colDT.Z(g_ScenarioRowIndex) = tClear
+            colNode.Z(g_ScenarioRowIndex) = nodeNumber
+            CreateOrUpdateKZ = True
+            Exit Function
+        End If
+    End If
+    
+    ' Ищем существующее событие "КЗ программное"
+    For i = 0 To tblEvents.Size - 1
+        If colType.ZS(i) = "Объект" And colName.ZS(i) = "КЗ программное" Then
+            g_ScenarioRowIndex = i
+            colT.Z(i) = tStart
+            colDT.Z(i) = tClear
+            colNode.Z(i) = nodeNumber
+            CreateOrUpdateKZ = True
+            Exit Function
+        End If
+    Next
+    
+    ' Создаём новое событие КЗ
+    newRow = tblEvents.AddRow()
+    g_ScenarioRowIndex = newRow
+    
+    ' Заполняем параметры
+    colType.ZS(newRow) = "Объект"
+    colName.ZS(newRow) = "КЗ программное"
+    colT.Z(newRow) = tStart        ' Момент возникновения КЗ (мс)
+    colDT.Z(newRow) = tClear       ' Длительность КЗ (мс)
+    colNode.Z(newRow) = nodeNumber ' Номер узла КЗ
+    
+    CreateOrUpdateKZ = True
     On Error GoTo 0
-End Sub
-
-' --- ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ функция двоичного поиска ---
-Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
-    Dim tMin: tMin = 0.0
-    Dim tMax: tMax = 1000.0
-    Dim epsilon: epsilon = 5.0
-    Dim tCritical: tCritical = -1
-    Dim maxIterations: maxIterations = 50
-    Dim iteration: iteration = 0
-
-    ' ===== ФАЗА 1: Проверка tMin (должно быть УСТОЙЧИВО) =====
-    For idx = 0 To UBound(selectedGenIndices)
-        genIdx = selectedGenIndices(idx)
-        colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
-    Next
-
-    If SolveUR() <> 0 Then
-        BinarySearchCriticalTime = -1
-        Call LogBinaryStep(powerLevel, "min_error", "", tMin, "", tMax, "", "Ошибка при t=min", -1, -1)
-        Exit Function
-    End If
-
-    ' УСТАНАВЛИВАЕМ ВРЕМЯ КЗ
-    Call SetShuntDuration(tMin)
-    ' КРИТИЧЕСКИ ВАЖНО: ПЕРЕЗАГРУЖАЕМ СЦЕНАРИЙ
-    Call ReloadDynamicScenario()
-
-    Dim dynRes: dynRes = spFWDynamic.Run()
-    If dynRes <> 0 Then
-        BinarySearchCriticalTime = -1
-        Call LogBinaryStep(powerLevel, "min_dyn_error", "", tMin, "", tMax, "", "Ошибка динамики", dynRes, -1)
-        Exit Function
-    End If
-
-    Dim maxDeltaMin: maxDeltaMin = GetMaxDelta()
-    Dim stableAtMin: stableAtMin = (maxDeltaMin <= 180)
-    Dim statusMin: If stableAtMin Then statusMin = "устойчив" Else statusMin = "нарушен"
-    Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDeltaMin, statusMin, dynRes, lastSnapIdx)
-
-    If Not stableAtMin Then
-        BinarySearchCriticalTime = -999
-        Call LogBinaryStep(powerLevel, "unstable_at_zero", "", tMin, "", "", maxDeltaMin, "КРИТИЧНО: нестабильно при t=0", dynRes, lastSnapIdx)
-        Exit Function
-    End If
-
-    ' ===== ФАЗА 2: Проверка tMax (должно быть НЕУСТОЙЧИВО) =====
-    For idx = 0 To UBound(selectedGenIndices)
-        genIdx = selectedGenIndices(idx)
-        colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
-    Next
-
-    If SolveUR() <> 0 Then
-        BinarySearchCriticalTime = -1
-        Call LogBinaryStep(powerLevel, "max_ur_error", "", tMin, "", tMax, "", "Ошибка УР", -1, -1)
-        Exit Function
-    End If
-
-    Call SetShuntDuration(tMax)
-    Call ReloadDynamicScenario()  ' ПЕРЕЗАГРУЖАЕМ СЦЕНАРИЙ
-
-    dynRes = spFWDynamic.Run()
-    If dynRes <> 0 Then
-        BinarySearchCriticalTime = -1
-        Call LogBinaryStep(powerLevel, "max_dyn_error", "", tMin, "", tMax, "", "Ошибка динамики", dynRes, -1)
-        Exit Function
-    End If
-
-    Dim maxDeltaMax: maxDeltaMax = GetMaxDelta()
-    Dim unstableAtMax: unstableAtMax = (maxDeltaMax > 180)
-    Dim statusMax: If unstableAtMax Then statusMax = "нарушен" Else statusMax = "устойчив"
-    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDeltaMax, statusMax, dynRes, lastSnapIdx)
-
-    If Not unstableAtMax Then
-        BinarySearchCriticalTime = 9999
-        Call LogBinaryStep(powerLevel, "stable_at_max", "", "", "", tMax, maxDeltaMax, "Устойчиво при t=" & tMax, dynRes, lastSnapIdx)
-        Exit Function
-    End If
-
-    ' ===== ФАЗА 3: ДВОИЧНЫЙ ПОИСК =====
-    Do While (tMax - tMin) > epsilon And iteration < maxIterations
-        iteration = iteration + 1
-        Dim tMid: tMid = (tMin + tMax) / 2.0
-
-        ' 1. ВОССТАНАВЛИВАЕМ МОЩНОСТИ
-        For idx = 0 To UBound(selectedGenIndices)
-            genIdx = selectedGenIndices(idx)
-            colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
-        Next
-
-        ' 2. ПЕРЕСЧИТЫВАЕМ УР
-        If SolveUR() <> 0 Then
-            BinarySearchCriticalTime = -1
-            Call LogBinaryStep(powerLevel, "binary_ur_error", iteration, tMin, tMid, tMax, "", "Ошибка УР", -1, -1)
-            Exit Function
-        End If
-
-        ' 3. УСТАНАВЛИВАЕМ НОВОЕ ВРЕМЯ КЗ
-        Call SetShuntDuration(tMid)
-        
-        ' 4. КРИТИЧЕСКИ ВАЖНО: ПЕРЕЗАГРУЖАЕМ СЦЕНАРИЙ
-        Call ReloadDynamicScenario()
-
-        ' 5. ЗАПУСКАЕМ ДИНАМИКУ
-        dynRes = spFWDynamic.Run()
-        If dynRes <> 0 Then
-            BinarySearchCriticalTime = -1
-            Call LogBinaryStep(powerLevel, "binary_dyn_error", iteration, tMin, tMid, tMax, "", "Ошибка динамики", dynRes, -1)
-            Exit Function
-        End If
-
-        ' 6. ПОЛУЧАЕМ РЕЗУЛЬТАТЫ
-        Dim maxDeltaMid: maxDeltaMid = GetMaxDelta()
-        Dim stableNow: stableNow = (maxDeltaMid <= 180)
-        Dim statusNow: If stableNow Then statusNow = "устойчив" Else statusNow = "нарушен"
-        Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDeltaMid, statusNow, dynRes, lastSnapIdx)
-
-        ' 7. ОБНОВЛЯЕМ ГРАНИЦЫ ПОИСКА
-        If stableNow Then
-            tMin = tMid  ' Устойчиво -> можем увеличить время КЗ
-        Else
-            tMax = tMid  ' Неустойчиво -> нужно уменьшить время КЗ
-        End If
-    Loop
-
-    tCritical = tMin
-    Call LogBinaryStep(powerLevel, "final", iteration, tMin, tCritical, tMax, "", "РЕЗУЛЬТАТ: tКрит=" & FormatNumber(tCritical, 3), 0, lastSnapIdx)
-
-    BinarySearchCriticalTime = tCritical
 End Function
 
 ' --- Основная логика ---
-
-' 1. Получение выбранных генераторов
-Dim selectedGenIndices()
-Dim selectedNodeIndices()
-Dim originalGenValues()
-Dim basePgValues()
-ReDim selectedGenIndices(-1)
-ReDim selectedNodeIndices(-1)
-ReDim originalGenValues(-1)
-ReDim basePgValues(-1)
-
-tblGen.SetSel("sel")
-genIdx = tblGen.FindNextSel(-1)
-While genIdx >= 0
-    ReDim Preserve selectedGenIndices(UBound(selectedGenIndices) + 1)
-    selectedGenIndices(UBound(selectedGenIndices)) = genIdx
-    
-    nodeNum = colGenNy.Z(genIdx)
-    nodeIdx = -1
-    For i = 0 To spNode.Size - 1
-        If spNodeNy.Z(i) = nodeNum Then
-            nodeIdx = i
-            Exit For
-        End If
-    Next
-    
-    If nodeIdx >= 0 Then
-        ReDim Preserve selectedNodeIndices(UBound(selectedNodeIndices) + 1)
-        selectedNodeIndices(UBound(selectedNodeIndices)) = nodeIdx
-        
-        ReDim Preserve originalGenValues(UBound(originalGenValues) + 1)
-        originalGenValues(UBound(originalGenValues)) = colGenP.Z(genIdx)
-        
-        ReDim Preserve basePgValues(UBound(basePgValues) + 1)
-        Dim pVal
-        pVal = colGenPnom.Z(genIdx)
-        If IsNumeric(pVal) And Not IsNull(pVal) Then
-            basePgValues(UBound(basePgValues)) = CDbl(pVal)
-        Else
-            basePgValues(UBound(basePgValues)) = colGenP.Z(genIdx)
-        End If
-    End If
-    
-    genIdx = tblGen.FindNextSel(genIdx)
-Wend
-
-If UBound(selectedGenIndices) < 0 Then
-    MsgBox "Не выбрано ни одного генератора!", vbExclamation, "Нет выбора"
+' Запрашиваем параметры КЗ
+nodeInput = InputBox("Введите номер узла КЗ:", "Параметры КЗ", "1")
+If Not IsNumeric(nodeInput) Then
+    MsgBox "Неверный номер узла."
     WScript.Quit
 End If
 
-' 2. Заголовки
-wsResult.Cells(resultRow, 1).Value = "Уровень мощности (%)"
-wsResult.Cells(resultRow, 2).Value = "Генератор"
-wsResult.Cells(resultRow, 3).Value = "Max Delta"
-wsResult.Cells(resultRow, 4).Value = "Статус"
-wsResult.Cells(resultRow, 5).Value = "Критическое время отключения КЗ (мс)"
-wsResult.Range(wsResult.Cells(resultRow, 1), wsResult.Cells(resultRow, 5)).Font.Bold = True
-resultRow = resultRow + 1
+tStartInput = InputBox("Введите время возникновения КЗ (мс):", "Параметры КЗ", "100")
+If Not IsNumeric(tStartInput) Then
+    MsgBox "Неверное время возникновения."
+    WScript.Quit
+End If
 
-wsLog.Cells(1, 1).Value = "Мощность %"
-wsLog.Cells(1, 2).Value = "Фаза"
-wsLog.Cells(1, 3).Value = "Итерация"
-wsLog.Cells(1, 4).Value = "t_min"
-wsLog.Cells(1, 5).Value = "t_mid"
-wsLog.Cells(1, 6).Value = "t_max"
-wsLog.Cells(1, 7).Value = "MaxDelta"
-wsLog.Cells(1, 8).Value = "Статус"
-wsLog.Cells(1, 9).Value = "DynCode"
-wsLog.Cells(1, 10).Value = "SnapIdx"
-wsLog.Rows(1).Font.Bold = True
-logRow = 2
+tClearInput = InputBox("Введите длительность КЗ (мс):", "Параметры КЗ", "150")
+If Not IsNumeric(tClearInput) Then
+    MsgBox "Неверная длительность КЗ."
+    WScript.Quit
+End If
 
-' 3. Цикл по уровням мощности
-Dim powerLevels(4)
-powerLevels(0) = 60
-powerLevels(1) = 70
-powerLevels(2) = 80
-powerLevels(3) = 90
-powerLevels(4) = 100
+' Создаём/обновляем КЗ
+nodeNum = CInt(nodeInput)
+tStart = CDbl(tStartInput)
+tClear = CDbl(tClearInput)
 
-Dim tCriticalForRows, genMaxDeltas(), anyViolation, tCritical
-Dim g, genName, maxDelta, stableNow, statusBase
-
-For pIdx = 0 To UBound(powerLevels)
-    powerLevel = powerLevels(pIdx)
-
-    ' Устанавливаем мощность генераторов для текущего уровня мощности
-    For idx = 0 To UBound(selectedGenIndices)
-        genIdx = selectedGenIndices(idx)
-        colGenP.Z(genIdx) = basePgValues(idx) * powerLevel / 100.0
-    Next
-
-    tCriticalForRows = ""
-
-    ' Пересчитываем установившийся режим
-    urRes = SolveUR()
-    If urRes = 0 Then
-        ' Запускаем динамику
-        dynRes = spFWDynamic.Run()
-        If dynRes = 0 Then
-            ReDim genMaxDeltas(UBound(selectedGenIndices))
-            anyViolation = False
-            For g = 0 To UBound(selectedGenIndices)
-                genIdx = selectedGenIndices(g)
-                genMaxDeltas(g) = GetGenMaxDelta(genIdx)
-                If genMaxDeltas(g) > 180 Then anyViolation = True
-            Next
-            
-            maxDelta = GetMaxDelta()
-            stableNow = (maxDelta <= 180)
-            If stableNow Then statusBase = "устойчив" Else statusBase = "нарушен"
-            Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, statusBase, dynRes, lastSnapIdx)
-
-            ' КРИТИЧЕСКИ ВАЖНО: После base расчёта восстанавливаем состояние
-            ' перед запуском двоичного поиска
-            For idx = 0 To UBound(selectedGenIndices)
-                genIdx = selectedGenIndices(idx)
-                colGenP.Z(genIdx) = basePgValues(idx) * powerLevel / 100.0
-            Next
-            urRes = SolveUR()  ' Восстановление УР
-
-            If anyViolation Then
-                tCritical = BinarySearchCriticalTime(powerLevel, basePgValues, selectedGenIndices)
-                If IsNumeric(tCritical) And tCritical >= 0 Then
-                    tCriticalForRows = FormatNumber(CDbl(tCritical), 3)
-                Else
-                    tCriticalForRows = "Ошибка поиска"
-                End If
-            Else
-                tCriticalForRows = "> 1000.0"
-            End If
-            
-            ' Записываем результаты
-            For g = 0 To UBound(selectedGenIndices)
-                genIdx = selectedGenIndices(g)
-                genName = colGenName.ZS(genIdx)
-                wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-                wsResult.Cells(resultRow, 2).Value = genName
-                wsResult.Cells(resultRow, 3).Value = FormatNumber(genMaxDeltas(g), 3)
-                If genMaxDeltas(g) > 180 Then
-                    wsResult.Cells(resultRow, 4).Value = "Нарушение устойчивости"
-                Else
-                    wsResult.Cells(resultRow, 4).Value = "Устойчивость сохранена"
-                End If
-                wsResult.Cells(resultRow, 5).Value = tCriticalForRows
-                resultRow = resultRow + 1
-            Next
-        Else
-            wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-            wsResult.Cells(resultRow, 2).Value = ""
-            wsResult.Cells(resultRow, 3).Value = ""
-            wsResult.Cells(resultRow, 4).Value = "Ошибка расчёта динамики"
-            wsResult.Cells(resultRow, 5).Value = "Ошибка (код " & dynRes & ")"
-            Call LogBinaryStep(powerLevel, "base_dyn_err", "", "", "", "", "", CStr("dyn_err"), dynRes, -1)
-            resultRow = resultRow + 1
-        End If
-    Else
-        wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
-        wsResult.Cells(resultRow, 2).Value = ""
-        wsResult.Cells(resultRow, 3).Value = ""
-        wsResult.Cells(resultRow, 4).Value = "Ошибка расчёта УР"
-        wsResult.Cells(resultRow, 5).Value = "Ошибка (код " & urRes & ")"
-        Call LogBinaryStep(powerLevel, "base_ur_err", "", "", "", "", "", CStr("ur_err"), urRes, -1)
-        resultRow = resultRow + 1
-    End If
-Next
-
-MsgBox "Расчёт завершён! Результаты в Excel.", vbInformation, "Готово"
+If CreateOrUpdateKZ(nodeNum, tStart, tClear) Then
+    MsgBox "КЗ создано!" & vbCrLf & _
+           "Узел: " & nodeNum & vbCrLf & _
+           "Время возникновения: " & tStart & " мс" & vbCrLf & _
+           "Длительность: " & tClear & " мс" & vbCrLf & _
+           "Индекс строки: " & g_ScenarioRowIndex
+Else
+    MsgBox "Ошибка создания КЗ!", vbCritical
+End If
