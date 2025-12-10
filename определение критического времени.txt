@@ -26,6 +26,20 @@ If Not IsNumeric(kzNodeInput) Then
 End If
 Dim kzNode: kzNode = CInt(kzNodeInput)
 
+kzTStartInput = InputBox("Введите время возникновения КЗ (мс):", "Параметры КЗ", "0")
+If Not IsNumeric(kzTStartInput) Then
+    MsgBox "Неверное время возникновения."
+    WScript.Quit
+End If
+Dim kzTStart: kzTStart = CDbl(kzTStartInput)
+
+kzBaseDurationInput = InputBox("Введите базовую длительность КЗ (мс):", "Параметры КЗ", "1000")
+If Not IsNumeric(kzBaseDurationInput) Then
+    MsgBox "Неверная базовая длительность."
+    WScript.Quit
+End If
+Dim kzBaseDuration: kzBaseDuration = CDbl(kzBaseDurationInput)
+
 ' --- Глобальная переменная для индекса события КЗ ---
 Dim g_ScenarioRowIndex: g_ScenarioRowIndex = -1
 
@@ -338,7 +352,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     End If
 
     ' УСТАНАВЛИВАЕМ ВРЕМЯ КЗ
-    If Not CreateOrUpdateKZ(kzNode, 0, tMin) Then
+    If Not CreateOrUpdateKZ(kzNode, kzTStart, tMin) Then
         BinarySearchCriticalTime = -1
         Call LogBinaryStep(powerLevel, "min_kz_error", "", tMin, "", tMax, "", "Ошибка создания КЗ", -1, -1)
         Exit Function
@@ -376,7 +390,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
         Exit Function
     End If
 
-    If Not CreateOrUpdateKZ(kzNode, 0, tMax) Then
+    If Not CreateOrUpdateKZ(kzNode, kzTStart, tMax) Then
         BinarySearchCriticalTime = -1
         Call LogBinaryStep(powerLevel, "max_kz_error", "", tMin, "", tMax, "", "Ошибка создания КЗ", -1, -1)
         Exit Function
@@ -420,7 +434,7 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
         End If
 
         ' 3. УСТАНАВЛИВАЕМ НОВОЕ ВРЕМЯ КЗ
-        If Not CreateOrUpdateKZ(kzNode, 0, tMid) Then
+        If Not CreateOrUpdateKZ(kzNode, kzTStart, tMid) Then
             BinarySearchCriticalTime = -1
             Call LogBinaryStep(powerLevel, "binary_kz_error", iteration, tMin, tMid, tMax, "", "Ошибка создания КЗ", -1, -1)
             Exit Function
@@ -556,8 +570,19 @@ For pIdx = 0 To UBound(powerLevels)
     ' Пересчитываем установившийся режим
     urRes = SolveUR()
     If urRes = 0 Then
-        ' Запускаем динамику
-        dynRes = spFWDynamic.Run()
+        ' Устанавливаем базовое КЗ
+        If Not CreateOrUpdateKZ(kzNode, kzTStart, kzBaseDuration) Then
+            wsResult.Cells(resultRow, 1).Value = powerLevel & "%"
+            wsResult.Cells(resultRow, 2).Value = ""
+            wsResult.Cells(resultRow, 3).Value = ""
+            wsResult.Cells(resultRow, 4).Value = "Ошибка создания базового КЗ"
+            wsResult.Cells(resultRow, 5).Value = "Ошибка"
+            Call LogBinaryStep(powerLevel, "base_kz_err", "", "", "", "", "", "Ошибка создания КЗ", -1, -1)
+            resultRow = resultRow + 1
+        Else
+            Call ReloadDynamicScenario()
+            ' Запускаем динамику
+            dynRes = spFWDynamic.Run()
         If dynRes = 0 Then
             ReDim genMaxDeltas(UBound(selectedGenIndices))
             anyViolation = False
