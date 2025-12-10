@@ -652,3 +652,5 @@ For pIdx = 0 To UBound(powerLevels)
 Next
 
 MsgBox "Расчёт завершён! Результаты в Excel.", vbInformation, "Готово"
+
+End
