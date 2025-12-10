@@ -1,154 +1,57 @@
-' --- Скрипт для программного создания КЗ в узле с обновлением сценария ---
-' Глобальная переменная - индекс созданного события
-Dim g_ScenarioRowIndex: g_ScenarioRowIndex = -1
+' --- Полный вывод ВСЕХ параметров существующих событий ---
 
-' --- Функция обновления сценария динамики ---
-Sub UpdateDynamicScenario()
-    On Error Resume Next
-    Set spFWDynamic = Rastr.FWDynamic
-    
-    ' Метод 1: Попытка обновить сценарий
-    spFWDynamic.UpdateScenario()
-    
-    ' Метод 2: Если не сработало - пересоздать объект
-    If Err.Number <> 0 Then
-        Err.Clear
-        Set spFWDynamic = Nothing
-        Set spFWDynamic = Rastr.FWDynamic
-    End If
-    On Error GoTo 0
-End Sub
+Set tblEvents = Rastr.Tables("DFWAutoActionScn")
 
-' --- Функция создания/изменения КЗ в узле ---
-Function CreateOrUpdateKZ(nodeNumber, tStart, tDuration)
-    On Error Resume Next
+If tblEvents Is Nothing Then
+    MsgBox "Таблица не найдена!", vbCritical
+    WScript.Quit
+End If
+
+If tblEvents.Size = 0 Then
+    MsgBox "Таблица пустая!", vbInformation
+    WScript.Quit
+End If
+
+' Создаём Excel для вывода
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+Set wb = xl.Workbooks.Add
+Set ws = wb.Worksheets(1)
+
+' Заголовки - все колонки
+ws.Cells(1, 1).Value = "Строка"
+For col = 0 To tblEvents.Cols.Count - 1
+    ws.Cells(1, col + 2).Value = tblEvents.Cols.Item(col).Name
+Next
+ws.Rows(1).Font.Bold = True
+
+' Выводим все строки
+For row = 0 To tblEvents.Size - 1
+    ws.Cells(row + 2, 1).Value = row
     
-    Set tblEvents = Rastr.Tables("DFWAutoActionScn")
-    
-    If tblEvents Is Nothing Then
-        MsgBox "Ошибка: Таблица DFWAutoActionScn не найдена!", vbCritical
-        CreateOrUpdateKZ = False
-        Exit Function
-    End If
-    
-    ' Получаем колонки
-    Set colType = tblEvents.Cols("Type")
-    Set colName = tblEvents.Cols("Name")
-    Set colTimeStart = tblEvents.Cols("TimeStart")
-    Set colDT = tblEvents.Cols("DT")
-    Set colObjectClass = tblEvents.Cols("ObjectClass")
-    Set colObjectKey = tblEvents.Cols("ObjectKey")
-    Set colObjectProp = tblEvents.Cols("ObjectProp")
-    Set colFormula = tblEvents.Cols("Formula")
-    
-    If colType Is Nothing Or colDT Is Nothing Or colTimeStart Is Nothing Then
-        MsgBox "Ошибка: Не найдены необходимые колонки!", vbCritical
-        CreateOrUpdateKZ = False
-        Exit Function
-    End If
-    
-    ' Если событие уже создано - просто меняем параметры
-    If g_ScenarioRowIndex >= 0 And g_ScenarioRowIndex < tblEvents.Size Then
-        If colName.ZS(g_ScenarioRowIndex) = "КЗ программное" Then
-            colTimeStart.Z(g_ScenarioRowIndex) = tStart
-            colDT.Z(g_ScenarioRowIndex) = tDuration
-            If Not colObjectKey Is Nothing Then
-                colObjectKey.ZS(g_ScenarioRowIndex) = CStr(nodeNumber)
-            End If
-            
-            ' КРИТИЧЕСКИ ВАЖНО: Обновляем сценарий динамики
-            Call UpdateDynamicScenario()
-            
-            CreateOrUpdateKZ = True
-            Exit Function
+    For col = 0 To tblEvents.Cols.Count - 1
+        Set colObj = tblEvents.Cols.Item(col)
+        
+        On Error Resume Next
+        ' Пробуем как строку
+        val = colObj.ZS(row)
+        If Err.Number <> 0 Then
+            Err.Clear
+            ' Пробуем как число
+            val = colObj.Z(row)
         End If
-    End If
-    
-    ' Ищем существующее событие "КЗ программное"
-    For i = 0 To tblEvents.Size - 1
-        If colType.ZS(i) = "Объект" And colName.ZS(i) = "КЗ программное" Then
-            g_ScenarioRowIndex = i
-            colTimeStart.Z(i) = tStart
-            colDT.Z(i) = tDuration
-            If Not colObjectKey Is Nothing Then
-                colObjectKey.ZS(i) = CStr(nodeNumber)
-            End If
-            
-            ' КРИТИЧЕСКИ ВАЖНО: Обновляем сценарий динамики
-            Call UpdateDynamicScenario()
-            
-            CreateOrUpdateKZ = True
-            Exit Function
+        
+        If Err.Number = 0 Then
+            ws.Cells(row + 2, col + 2).Value = val
+        Else
+            ws.Cells(row + 2, col + 2).Value = "[ошибка]"
         End If
+        On Error GoTo 0
     Next
-    
-    ' Создаём новое событие КЗ
-    newRow = tblEvents.AddRow()
-    g_ScenarioRowIndex = newRow
-    
-    ' Заполняем параметры (копируем формат из "Шунт Z")
-    colType.ZS(newRow) = "Объект"
-    colName.ZS(newRow) = "КЗ программное"
-    colTimeStart.Z(newRow) = tStart
-    colDT.Z(newRow) = tDuration
-    
-    ' Пытаемся задать узел КЗ разными способами
-    If Not colObjectClass Is Nothing Then
-        colObjectClass.ZS(newRow) = "node"
-    End If
-    
-    If Not colObjectKey Is Nothing Then
-        ' Вариант 1: Просто номер
-        colObjectKey.ZS(newRow) = CStr(nodeNumber)
-    End If
-    
-    If Not colObjectProp Is Nothing Then
-        ' Вариант 2: Возможно нужно указать свойство
-        colObjectProp.ZS(newRow) = "sta"  ' или другое свойство
-    End If
-    
-    If Not colFormula Is Nothing Then
-        ' Вариант 3: Возможно нужна формула
-        colFormula.ZS(newRow) = "0"  ' Значение для отключения
-    End If
-    
-    ' КРИТИЧЕСКИ ВАЖНО: Обновляем сценарий динамики
-    Call UpdateDynamicScenario()
-    
-    CreateOrUpdateKZ = True
-    On Error GoTo 0
-End Function
+Next
 
-' --- Основная логика ---
-nodeInput = InputBox("Введите номер узла КЗ:", "Параметры КЗ", "1")
-If Not IsNumeric(nodeInput) Then
-    MsgBox "Неверный номер узла."
-    WScript.Quit
-End If
+' Автоподбор ширины
+ws.Columns.AutoFit
 
-tStartInput = InputBox("Введите время возникновения КЗ (мс):", "Параметры КЗ", "100")
-If Not IsNumeric(tStartInput) Then
-    MsgBox "Неверное время возникновения."
-    WScript.Quit
-End If
-
-tDurationInput = InputBox("Введите длительность КЗ (мс):", "Параметры КЗ", "150")
-If Not IsNumeric(tDurationInput) Then
-    MsgBox "Неверная длительность КЗ."
-    WScript.Quit
-End If
-
-' Создаём/обновляем КЗ
-nodeNum = CInt(nodeInput)
-tStart = CDbl(tStartInput)
-tDuration = CDbl(tDurationInput)
-
-If CreateOrUpdateKZ(nodeNum, tStart, tDuration) Then
-    MsgBox "КЗ создано/обновлено и сценарий динамики обновлён!" & vbCrLf & _
-           "Узел: " & nodeNum & vbCrLf & _
-           "Время возникновения: " & tStart & " мс" & vbCrLf & _
-           "Длительность: " & tDuration & " мс" & vbCrLf & _
-           "Индекс строки: " & g_ScenarioRowIndex, vbInformation
-Else
-    MsgBox "Ошибка создания КЗ!", vbCritical
-End If
+MsgBox "Данные выгружены в Excel!" & vbCrLf & _
+       "НАЙДИТЕ строку с 'Шунт Z' и скопируйте мне ВСЕ её значения!", vbInformation
