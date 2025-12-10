@@ -208,7 +208,6 @@ End Sub
 
 ' --- ИСПРАВЛЕННАЯ функция двоичного поиска ---
 Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
-    ' Параметры поиска
     Dim tMin: tMin = 0.0
     Dim tMax: tMax = 1000.0
     Dim epsilon: epsilon = 5.0
@@ -216,119 +215,103 @@ Function BinarySearchCriticalTime(powerLevel, baseGenValues, selectedGenIndices)
     Dim maxIterations: maxIterations = 50
     Dim iteration: iteration = 0
 
-    ' Восстанавливаем мощность генераторов
-    For idx = 0 To UBound(selectedGenIndices)
-        genIdx = selectedGenIndices(idx)
-        colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
-    Next
-
-    If SolveUR() <> 0 Then
-        BinarySearchCriticalTime = -1
-        Call LogBinaryStep(powerLevel, "init_ur_error", "", "", "", "", "", "Ошибка УР", -1, -1)
-        Exit Function
-    End If
-
-    ' ===== ФАЗА 1: Проверка tMin (должно быть УСТОЙЧИВО) =====
-    Call SetShuntDuration(tMin)
-    dynRes = spFWDynamic.Run()
-
-    If dynRes <> 0 Then
-        BinarySearchCriticalTime = -1
-        Call LogBinaryStep(powerLevel, "min_dyn_error", "", tMin, "", tMax, "", "Ошибка динамики", dynRes, -1)
-        Exit Function
-    End If
-    
-    Dim maxDelta: maxDelta = GetMaxDelta()
-    Dim stableAtMin: stableAtMin = (maxDelta <= 180)
-    Dim statusMin
-    If stableAtMin Then statusMin = "устойчив" Else statusMin = "нарушен"
-    Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDelta, statusMin, dynRes, lastSnapIdx)
-    
-    If Not stableAtMin Then
-        BinarySearchCriticalTime = -999
-        Call LogBinaryStep(powerLevel, "unstable_at_zero", "", tMin, "", "", maxDelta, "КРИТИЧНО: нестабильно при t=0", dynRes, lastSnapIdx)
-        Exit Function
-    End If
-    
-    ' ===== ФАЗА 2: Проверка tMax (должно быть НЕУСТОЙЧИВО) =====
-    ' ВАЖНО: Восстанавливаем мощности перед каждым расчетом
-    For idx = 0 To UBound(selectedGenIndices)
-        genIdx = selectedGenIndices(idx)
-        colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
-    Next
-
-    If SolveUR() <> 0 Then
-        BinarySearchCriticalTime = -1
-        Call LogBinaryStep(powerLevel, "max_ur_error", "", tMin, "", tMax, "", "Ошибка УР", -1, -1)
-        Exit Function
-    End If
-    
-    Call SetShuntDuration(tMax)
-    dynRes = spFWDynamic.Run()
-    
-    If dynRes <> 0 Then
-        BinarySearchCriticalTime = -1
-        Call LogBinaryStep(powerLevel, "max_dyn_error", "", tMin, "", tMax, "", "Ошибка динамики", dynRes, -1)
-        Exit Function
-    End If
-    
-    maxDelta = GetMaxDelta()
-    Dim unstableAtMax: unstableAtMax = (maxDelta > 180)
-    Dim statusMax
-    If unstableAtMax Then statusMax = "нарушен" Else statusMax = "устойчив"
-    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDelta, statusMax, dynRes, lastSnapIdx)
-    
-    If Not unstableAtMax Then
-        BinarySearchCriticalTime = 9999
-        Call LogBinaryStep(powerLevel, "stable_at_max", "", "", "", tMax, maxDelta, "Устойчиво при t=" & tMax, dynRes, lastSnapIdx)
-        Exit Function
-    End If
-    
-    ' ===== ФАЗА 3: ДВОИЧНЫЙ ПОИСК =====
-    Do While (tMax - tMin) > epsilon And iteration < maxIterations
-        iteration = iteration + 1
-        tMid = (tMin + tMax) / 2.0
-        
-        ' КРИТИЧЕСКИ ВАЖНО: Восстанавливаем мощности перед каждым расчётом
+    ' ===== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: Полное восстановление состояния =====
+    Function RestoreAndCalculate(tShunt)
+        ' 1. Восстанавливаем мощности генераторов
         For idx = 0 To UBound(selectedGenIndices)
             genIdx = selectedGenIndices(idx)
             colGenP.Z(genIdx) = baseGenValues(idx) * powerLevel / 100.0
         Next
 
+        ' 2. Пересчитываем установившийся режим
         If SolveUR() <> 0 Then
-            BinarySearchCriticalTime = -1
-            Call LogBinaryStep(powerLevel, "binary_ur_error", iteration, tMin, tMid, tMax, "", "Ошибка УР", -1, -1)
+            RestoreAndCalculate = -1
             Exit Function
         End If
-        
-        Call SetShuntDuration(tMid)
-        dynRes = spFWDynamic.Run()
-        
+
+        ' 3. Устанавливаем время отключения
+        Call SetShuntDuration(tShunt)
+
+        ' 4. Запускаем динамику
+        Dim dynRes: dynRes = spFWDynamic.Run()
         If dynRes <> 0 Then
-            BinarySearchCriticalTime = -1
-            Call LogBinaryStep(powerLevel, "binary_dyn_error", iteration, tMin, tMid, tMax, "", "Ошибка динамики", dynRes, -1)
+            RestoreAndCalculate = -1
             Exit Function
         End If
-        
-        maxDelta = GetMaxDelta()
-        Dim stableNow: stableNow = (maxDelta <= 180)
-        Dim statusNow
-        If stableNow Then statusNow = "устойчив" Else statusNow = "нарушен"
-        Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDelta, statusNow, dynRes, lastSnapIdx)
-        
+
+        ' 5. Получаем результат
+        RestoreAndCalculate = GetMaxDelta()
+    End Function
+
+    ' ===== ФАЗА 1: Проверка tMin (должно быть УСТОЙЧИВО) =====
+    Dim maxDeltaMin: maxDeltaMin = RestoreAndCalculate(tMin)
+
+    If maxDeltaMin < 0 Then
+        BinarySearchCriticalTime = -1
+        Call LogBinaryStep(powerLevel, "min_error", "", tMin, "", tMax, "", "Ошибка при t=min", -1, -1)
+        Exit Function
+    End If
+
+    Dim stableAtMin: stableAtMin = (maxDeltaMin <= 180)
+    Dim statusMin: If stableAtMin Then statusMin = "устойчив" Else statusMin = "нарушен"
+    Call LogBinaryStep(powerLevel, "start_min", "", tMin, "", tMax, maxDeltaMin, statusMin, 0, lastSnapIdx)
+
+    If Not stableAtMin Then
+        BinarySearchCriticalTime = -999
+        Call LogBinaryStep(powerLevel, "unstable_at_zero", "", tMin, "", "", maxDeltaMin, "КРИТИЧНО: нестабильно при t=0", 0, lastSnapIdx)
+        Exit Function
+    End If
+
+    ' ===== ФАЗА 2: Проверка tMax (должно быть НЕУСТОЙЧИВО) =====
+    Dim maxDeltaMax: maxDeltaMax = RestoreAndCalculate(tMax)
+
+    If maxDeltaMax < 0 Then
+        BinarySearchCriticalTime = -1
+        Call LogBinaryStep(powerLevel, "max_error", "", tMin, "", tMax, "", "Ошибка при t=max", -1, -1)
+        Exit Function
+    End If
+
+    Dim unstableAtMax: unstableAtMax = (maxDeltaMax > 180)
+    Dim statusMax: If unstableAtMax Then statusMax = "нарушен" Else statusMax = "устойчив"
+    Call LogBinaryStep(powerLevel, "start_max", "", tMin, "", tMax, maxDeltaMax, statusMax, 0, lastSnapIdx)
+
+    If Not unstableAtMax Then
+        BinarySearchCriticalTime = 9999
+        Call LogBinaryStep(powerLevel, "stable_at_max", "", "", "", tMax, maxDeltaMax, "Устойчиво при t=" & tMax, 0, lastSnapIdx)
+        Exit Function
+    End If
+
+    ' ===== ФАЗА 3: ДВОИЧНЫЙ ПОИСК =====
+    Do While (tMax - tMin) > epsilon And iteration < maxIterations
+        iteration = iteration + 1
+        Dim tMid: tMid = (tMin + tMax) / 2.0
+
+        ' КРИТИЧЕСКИ ВАЖНО: Полное восстановление перед каждым расчётом
+        Dim maxDeltaMid: maxDeltaMid = RestoreAndCalculate(tMid)
+
+        If maxDeltaMid < 0 Then
+            BinarySearchCriticalTime = -1
+            Call LogBinaryStep(powerLevel, "binary_error", iteration, tMin, tMid, tMax, "", "Ошибка при t=mid", -1, -1)
+            Exit Function
+        End If
+
+        Dim stableNow: stableNow = (maxDeltaMid <= 180)
+        Dim statusNow: If stableNow Then statusNow = "устойчив" Else statusNow = "нарушен"
+        Call LogBinaryStep(powerLevel, "binary", iteration, tMin, tMid, tMax, maxDeltaMid, statusNow, 0, lastSnapIdx)
+
         ' Логика двоичного поиска:
-        ' Устойчиво при tMid -> можем увеличить время (сдвигаем tMin вверх)
-        ' Неустойчиво при tMid -> нужно уменьшить время (сдвигаем tMax вниз)
+        ' Устойчиво при tMid -> можем увеличить время (tMin = tMid)
+        ' Неустойчиво при tMid -> нужно уменьшить время (tMax = tMid)
         If stableNow Then
             tMin = tMid
         Else
             tMax = tMid
         End If
     Loop
-    
+
     tCritical = tMin
     Call LogBinaryStep(powerLevel, "final", iteration, tMin, tCritical, tMax, "", "РЕЗУЛЬТАТ: tКрит=" & FormatNumber(tCritical, 3), 0, lastSnapIdx)
-    
+
     BinarySearchCriticalTime = tCritical
 End Function
 
@@ -446,7 +429,15 @@ For pIdx = 0 To UBound(powerLevels)
             stableNow = (maxDelta <= 180)
             If stableNow Then statusBase = "устойчив" Else statusBase = "нарушен"
             Call LogBinaryStep(powerLevel, "base", "", "", "", "", maxDelta, statusBase, dynRes, lastSnapIdx)
-            
+
+            ' КРИТИЧЕСКИ ВАЖНО: После base расчёта восстанавливаем состояние
+            ' перед запуском двоичного поиска
+            For idx = 0 To UBound(selectedGenIndices)
+                genIdx = selectedGenIndices(idx)
+                colGenP.Z(genIdx) = basePgValues(idx) * powerLevel / 100.0
+            Next
+            urRes = SolveUR()  ' Восстановление УР
+
             If anyViolation Then
                 tCritical = BinarySearchCriticalTime(powerLevel, basePgValues, selectedGenIndices)
                 If IsNumeric(tCritical) And tCritical >= 0 Then
