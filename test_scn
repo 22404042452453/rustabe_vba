@@ -1,6 +1,23 @@
-' --- Скрипт для программного создания КЗ в узле ---
+' --- Скрипт для программного создания КЗ в узле с обновлением сценария ---
 ' Глобальная переменная - индекс созданного события
 Dim g_ScenarioRowIndex: g_ScenarioRowIndex = -1
+
+' --- Функция обновления сценария динамики ---
+Sub UpdateDynamicScenario()
+    On Error Resume Next
+    Set spFWDynamic = Rastr.FWDynamic
+    
+    ' Метод 1: Попытка обновить сценарий
+    spFWDynamic.UpdateScenario()
+    
+    ' Метод 2: Если не сработало - пересоздать объект
+    If Err.Number <> 0 Then
+        Err.Clear
+        Set spFWDynamic = Nothing
+        Set spFWDynamic = Rastr.FWDynamic
+    End If
+    On Error GoTo 0
+End Sub
 
 ' --- Функция создания/изменения КЗ в узле ---
 Function CreateOrUpdateKZ(nodeNumber, tStart, tDuration)
@@ -14,13 +31,15 @@ Function CreateOrUpdateKZ(nodeNumber, tStart, tDuration)
         Exit Function
     End If
     
-    ' ПРАВИЛЬНЫЕ имена колонок из вашей таблицы
+    ' Получаем колонки
     Set colType = tblEvents.Cols("Type")
     Set colName = tblEvents.Cols("Name")
-    Set colTimeStart = tblEvents.Cols("TimeStart")  ' Время начала
-    Set colDT = tblEvents.Cols("DT")                ' Длительность
+    Set colTimeStart = tblEvents.Cols("TimeStart")
+    Set colDT = tblEvents.Cols("DT")
     Set colObjectClass = tblEvents.Cols("ObjectClass")
-    Set colObjectKey = tblEvents.Cols("ObjectKey")  ' Ключ объекта (узел)
+    Set colObjectKey = tblEvents.Cols("ObjectKey")
+    Set colObjectProp = tblEvents.Cols("ObjectProp")
+    Set colFormula = tblEvents.Cols("Formula")
     
     If colType Is Nothing Or colDT Is Nothing Or colTimeStart Is Nothing Then
         MsgBox "Ошибка: Не найдены необходимые колонки!", vbCritical
@@ -36,6 +55,10 @@ Function CreateOrUpdateKZ(nodeNumber, tStart, tDuration)
             If Not colObjectKey Is Nothing Then
                 colObjectKey.ZS(g_ScenarioRowIndex) = CStr(nodeNumber)
             End If
+            
+            ' КРИТИЧЕСКИ ВАЖНО: Обновляем сценарий динамики
+            Call UpdateDynamicScenario()
+            
             CreateOrUpdateKZ = True
             Exit Function
         End If
@@ -50,6 +73,10 @@ Function CreateOrUpdateKZ(nodeNumber, tStart, tDuration)
             If Not colObjectKey Is Nothing Then
                 colObjectKey.ZS(i) = CStr(nodeNumber)
             End If
+            
+            ' КРИТИЧЕСКИ ВАЖНО: Обновляем сценарий динамики
+            Call UpdateDynamicScenario()
+            
             CreateOrUpdateKZ = True
             Exit Function
         End If
@@ -59,28 +86,40 @@ Function CreateOrUpdateKZ(nodeNumber, tStart, tDuration)
     newRow = tblEvents.AddRow()
     g_ScenarioRowIndex = newRow
     
-    ' Заполняем параметры
+    ' Заполняем параметры (копируем формат из "Шунт Z")
     colType.ZS(newRow) = "Объект"
     colName.ZS(newRow) = "КЗ программное"
-    colTimeStart.Z(newRow) = tStart        ' Время начала КЗ (мс)
-    colDT.Z(newRow) = tDuration            ' Длительность КЗ (мс)
+    colTimeStart.Z(newRow) = tStart
+    colDT.Z(newRow) = tDuration
     
-    ' Устанавливаем класс объекта (узел)
+    ' Пытаемся задать узел КЗ разными способами
     If Not colObjectClass Is Nothing Then
-        colObjectClass.ZS(newRow) = "node"  ' или "Node"
+        colObjectClass.ZS(newRow) = "node"
     End If
     
-    ' Устанавливаем ключ объекта (номер узла)
     If Not colObjectKey Is Nothing Then
+        ' Вариант 1: Просто номер
         colObjectKey.ZS(newRow) = CStr(nodeNumber)
     End If
+    
+    If Not colObjectProp Is Nothing Then
+        ' Вариант 2: Возможно нужно указать свойство
+        colObjectProp.ZS(newRow) = "sta"  ' или другое свойство
+    End If
+    
+    If Not colFormula Is Nothing Then
+        ' Вариант 3: Возможно нужна формула
+        colFormula.ZS(newRow) = "0"  ' Значение для отключения
+    End If
+    
+    ' КРИТИЧЕСКИ ВАЖНО: Обновляем сценарий динамики
+    Call UpdateDynamicScenario()
     
     CreateOrUpdateKZ = True
     On Error GoTo 0
 End Function
 
 ' --- Основная логика ---
-' Запрашиваем параметры КЗ
 nodeInput = InputBox("Введите номер узла КЗ:", "Параметры КЗ", "1")
 If Not IsNumeric(nodeInput) Then
     MsgBox "Неверный номер узла."
@@ -105,7 +144,7 @@ tStart = CDbl(tStartInput)
 tDuration = CDbl(tDurationInput)
 
 If CreateOrUpdateKZ(nodeNum, tStart, tDuration) Then
-    MsgBox "КЗ создано/обновлено!" & vbCrLf & _
+    MsgBox "КЗ создано/обновлено и сценарий динамики обновлён!" & vbCrLf & _
            "Узел: " & nodeNum & vbCrLf & _
            "Время возникновения: " & tStart & " мс" & vbCrLf & _
            "Длительность: " & tDuration & " мс" & vbCrLf & _
