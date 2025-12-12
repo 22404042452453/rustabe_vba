@@ -251,10 +251,10 @@ Sub RunDynamicsAndWrite(genSheet, description)
 
                 wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
                 wsData.Cells(1, timeCol).Value = genName & " (Time)"
-                wsData.Cells(1, checkCol).Value = genName & " (>180)"
+                wsData.Cells(1, checkCol).Value = genName & " (>360)"
 
                 wsData.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
-                wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & deltaCol & ">180,ROW(),999999)"
+                wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & deltaCol & ">360,ROW(),999999)"
 
                 deltaStartAddr = wsData.Cells(2, deltaCol).Address(False, False, 1, True)
                 deltaEndAddr = wsData.Cells(npoints + 1, deltaCol).Address(False, False, 1, True)
@@ -272,8 +272,8 @@ Sub RunDynamicsAndWrite(genSheet, description)
                 wsResult.Cells(resultRow, 2).Formula = "=MAX(" & deltaRange & ")"
                 wsResult.Cells(resultRow, 3).Formula = "=MIN(" & deltaRange & ")"
                 wsResult.Cells(resultRow, 4).Formula = "=INDEX(" & timeRange & ",MATCH(MAX(" & deltaRange & ")," & deltaRange & ",0))"
-                wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>180,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
-                wsResult.Cells(resultRow, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+                wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>360,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
+                wsResult.Cells(resultRow, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>360,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
 
                 resultRow = resultRow + 1
                 dataCol = dataCol + 3
@@ -399,5 +399,3 @@ MsgBox "Обработка завершена. Сценариев: " & scenarioC
 On Error Resume Next
 xl.DisplayAlerts = True
 On Error GoTo 0
-
-
