@@ -1,0 +1,57 @@
+' --- Полный вывод ВСЕХ параметров существующих событий ---
+
+Set tblEvents = Rastr.Tables("DFWAutoActionScn")
+
+If tblEvents Is Nothing Then
+    MsgBox "Таблица не найдена!", vbCritical
+    WScript.Quit
+End If
+
+If tblEvents.Size = 0 Then
+    MsgBox "Таблица пустая!", vbInformation
+    WScript.Quit
+End If
+
+' Создаём Excel для вывода
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+Set wb = xl.Workbooks.Add
+Set ws = wb.Worksheets(1)
+
+' Заголовки - все колонки
+ws.Cells(1, 1).Value = "Строка"
+For col = 0 To tblEvents.Cols.Count - 1
+    ws.Cells(1, col + 2).Value = tblEvents.Cols.Item(col).Name
+Next
+ws.Rows(1).Font.Bold = True
+
+' Выводим все строки
+For row = 0 To tblEvents.Size - 1
+    ws.Cells(row + 2, 1).Value = row
+    
+    For col = 0 To tblEvents.Cols.Count - 1
+        Set colObj = tblEvents.Cols.Item(col)
+        
+        On Error Resume Next
+        ' Пробуем как строку
+        val = colObj.ZS(row)
+        If Err.Number <> 0 Then
+            Err.Clear
+            ' Пробуем как число
+            val = colObj.Z(row)
+        End If
+        
+        If Err.Number = 0 Then
+            ws.Cells(row + 2, col + 2).Value = val
+        Else
+            ws.Cells(row + 2, col + 2).Value = "[ошибка]"
+        End If
+        On Error GoTo 0
+    Next
+Next
+
+' Автоподбор ширины
+ws.Columns.AutoFit
+
+MsgBox "Данные выгружены в Excel!" & vbCrLf & _
+       "НАЙДИТЕ строку с 'Шунт Z' и скопируйте мне ВСЕ её значения!", vbInformation
