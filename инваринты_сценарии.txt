@@ -1,7 +1,7 @@
 ' --- Параметры сценариев ---
 ' Задайте путь к шаблону и папке с файлами .scn
-ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
-ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
+ScenarioTemplatePath = "C:\Users\Desktop\сценарии\1.scn"
+ScenarioFolderPath   = "C:\Users\Desktop\сценарии"
 
 ' --- Инициализация FileSystemObject ---
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -90,7 +90,7 @@ Else
                     If colName Is Nothing Then
                         MsgBox "Колонка Name отсутствует в Generator: " & f.Name, vbExclamation, "Пропуск"
                     Else
-                        Dim dataCol: dataCol = 1 ' колонки на wsData: Delta, Time, Check>180
+                        Dim dataCol: dataCol = 1 ' колонки на wsData: Delta, Time, Check>360
 
                         For i = 0 To tbl.Size - 1
                             genName = colName.ZS(i)
@@ -118,12 +118,12 @@ Else
 
                                     wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
                                     wsData.Cells(1, timeCol).Value = genName & " (Time)"
-                                    wsData.Cells(1, checkCol).Value = genName & " (>180)"
+                                    wsData.Cells(1, checkCol).Value = genName & " (>360)"
 
                                     ' Запись массива в две колонки: Delta, Time
                                     wsData.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
-                                    ' Вспомогательная колонка: если Delta > 180, то номер строки, иначе большое число
-                                    wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & deltaCol & ">180,ROW(),999999)"
+                                    ' Вспомогательная колонка: если Delta > 360, то номер строки, иначе большое число
+                                    wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & deltaCol & ">360,ROW(),999999)"
 
                                     ' Диапазоны
                                     deltaStartAddr = wsData.Cells(2, deltaCol).Address(False, False, 1, True)
@@ -143,8 +143,8 @@ Else
                                     wsResult.Cells(resultRow, 2).Formula = "=MAX(" & deltaRange & ")"
                                     wsResult.Cells(resultRow, 3).Formula = "=MIN(" & deltaRange & ")"
                                     wsResult.Cells(resultRow, 4).Formula = "=INDEX(" & timeRange & ",MATCH(MAX(" & deltaRange & ")," & deltaRange & ",0))"
-                                    wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>180,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
-                                    wsResult.Cells(resultRow, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+                                    wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>360,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
+                                    wsResult.Cells(resultRow, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>360,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
 
                                     resultRow = resultRow + 1
                                     dataCol = dataCol + 3
@@ -187,5 +187,3 @@ Set wb = Nothing
 Set xl = Nothing
 Set fso = Nothing
 On Error GoTo 0
-
-
