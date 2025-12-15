@@ -88,7 +88,7 @@ Class Combinator
             Counter(m-1) = Counter(m-1) + 1
         Else
             for i = m-2 to 0 step -1
-                if Counter(i) < n - m + 1 Then
+                if Counter(i) < n - m + i Then
                     Counter(i) = Counter(i) + 1
                     for j = i + 1 to m - 1
                         Counter(j) = Counter(j-1) + 1
