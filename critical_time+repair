@@ -5,8 +5,10 @@ Set xl = CreateObject("Excel.Application")
 xl.Visible = True
 xl.DisplayAlerts = False
 Set wb = xl.Workbooks.Add
-Set wsData = wb.Worksheets("Данные")
-Set wsResult = wb.Worksheets("Результаты")
+Set wsData = wb.Worksheets(1)
+wsData.Name = "Данные"
+Set wsResult = wb.Worksheets.Add
+wsResult.Name = "Результаты"
 Set wsLog = wb.Worksheets.Add
 wsLog.Name = "Логи"
 
@@ -15,7 +17,7 @@ Dim resultRow: resultRow = 1
 ' --- Параметры сценариев ---
 ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
-MaxRepair = 4
+MaxRepair = 2
 MaxRepair_count = 1
 
 Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
