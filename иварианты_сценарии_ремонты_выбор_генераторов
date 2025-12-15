@@ -224,9 +224,9 @@ Sub RunDynamicsAndWrite(genSheet, description)
     For Each genIdx In selectedGenIndices
         genName = colName.ZS(genIdx)
 
-        ' Пытаемся взять последний снимок (MaxSnapshotIndex=5 до 0)
+        ' Пытаемся взять последний снимок (MaxSnapshotIndex=1000 до 0)
         Set Plot = Nothing
-        For snapIdx = 5 To 0 Step -1
+        For snapIdx = 1000 To 0 Step -1
             On Error Resume Next
             tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
             errNum = Err.Number
