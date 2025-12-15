@@ -397,30 +397,26 @@ Else
 ' Перебор только Repair (аварийные отключения не используем)
                     totalRepairs = UBound(RepairIndexes) + 1
 
-                    ' ДОБАВЬТЕ ЭТУ ПРОВЕРКУ:
-                    If totalRepairs = 0 Then
-                        ' Если нет ремонтных элементов, пропускаем перебор
-                        GoTo NextScenario
-                    End If
-
                     If MaxRepair > totalRepairs Then MaxRepair = totalRepairs
                     ' Перебор от MaxRepair_count до MaxRepair (без обязательного нуля)
-                    For RepOff = MaxRepair_count To MaxRepair
-                        ' n в комбинаторе — количество элементов (totalRepairs)
-                        RepairComb.Init RepairIndexes, RepOff, totalRepairs
-                        If RepairComb.FirstCombination(RepComb) Then
-                            Do
-                                ' Применяем выбранные Repair
-                                RepTitle = PlaceOffs(RepComb, RepOff)
-                                ' Запускаем расчёт динамики и запись результатов
-                                RunDynAndWriteSafe "УР: Ремонт ВЛ - " & RepTitle
-                                ' Восстанавливаем топологию после комбинации
-                                TopologyRestore
+                    If totalRepairs > 0 Then
+                        For RepOff = MaxRepair_count To MaxRepair
+                            ' n в комбинаторе — количество элементов (totalRepairs)
+                            RepairComb.Init RepairIndexes, RepOff, totalRepairs
+                            If RepairComb.FirstCombination(RepComb) Then
+                                Do
+                                    ' Применяем выбранные Repair
+                                    RepTitle = PlaceOffs(RepComb, RepOff)
+                                    ' Запускаем расчёт динамики и запись результатов
+                                    RunDynAndWriteSafe "УР: Ремонт ВЛ - " & RepTitle
+                                    ' Восстанавливаем топологию после комбинации
+                                    TopologyRestore
 
-                                hasNext = RepairComb.NextCombination(RepComb)
-                            Loop While hasNext
-                        End If
-                    Next
+                                    hasNext = RepairComb.NextCombination(RepComb)
+                                Loop While hasNext
+                            End If
+                        Next
+                    End If
 
                 End If
             Next
