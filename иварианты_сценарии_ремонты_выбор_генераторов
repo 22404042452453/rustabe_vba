@@ -376,9 +376,13 @@ Else
                     tblGen.SetSel("sel")
                     genIdx = tblGen.FindNextSel(-1)
                     While genIdx >= 0
+                        If genCount = 0 Then
+                            ReDim selectedGenIndices(0)
+                        Else
+                            ReDim Preserve selectedGenIndices(UBound(selectedGenIndices) + 1)
+                        End If
+                        selectedGenIndices(UBound(selectedGenIndices)) = genIdx
                         genCount = genCount + 1
-                        ReDim Preserve selectedGenIndices(genCount - 1)
-                        selectedGenIndices(genCount - 1) = genIdx
                         genIdx = tblGen.FindNextSel(genIdx)
                     Wend
 
@@ -389,7 +393,7 @@ Else
                     wsData.Cells.Clear
 
                     ' Заголовок сценария
-                    wsResult.Cells(resultRow, 1).Value = "Сценарий: " & scnPath
+                    wsResult.Cells(resultRow, 1).Value = "Сценарий " & scenarioCount & ": " & scnPath
                     wsResult.Cells(resultRow, 1).Font.Bold = True
                     resultRow = resultRow + 1
 
