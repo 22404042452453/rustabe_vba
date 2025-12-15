@@ -81,7 +81,7 @@ Class Combinator
         for i = 0 to m-1
             Vout(i) = V(Counter(i))
         next
-        FirstCombination = not ((m = n) or (m = 0))
+        FirstCombination = not ((m > n) or (m = 0))
     end function
     public function NextCombination(byref Vout)
         if Counter(m-1) < n - 1 Then
