@@ -84,27 +84,31 @@ Class Combinator
         FirstCombination = not ((m > n) or (m = 0))
     end function
     public function NextCombination(byref Vout)
+        dim incremented
+        incremented = false
         if Counter(m-1) < n - 1 Then
             Counter(m-1) = Counter(m-1) + 1
+            incremented = true
         Else
             for i = m-2 to 0 step -1
                 if Counter(i) < n - m + i Then
                     Counter(i) = Counter(i) + 1
+                    incremented = true
                     for j = i + 1 to m - 1
                         Counter(j) = Counter(j-1) + 1
                     next
                 End If
             next
         End if
-        Redim Vout(m-1)
-        for i = 0 to m-1
-            Vout(i) = V(Counter(i))
-        next
-        if Counter(0) = n - m Then
-            NextCombination = 0
-        Else
+        if incremented then
+            Redim Vout(m-1)
+            for i = 0 to m-1
+                Vout(i) = V(Counter(i))
+            next
             NextCombination = 1
-        End If
+        else
+            NextCombination = 0
+        end if
     end function
 End Class
 
