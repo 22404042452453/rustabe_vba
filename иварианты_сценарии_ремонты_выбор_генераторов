@@ -4,7 +4,7 @@ ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
 ' Максимальные числа для Repair (как в вариантах)
-MaxRepair = 4
+MaxRepair = 2
 MaxRepair_count = 1
 
 ' --- Rastr таблицы ---
@@ -81,7 +81,7 @@ Class Combinator
         for i = 0 to m-1
             Vout(i) = V(Counter(i))
         next
-        FirstCombination = not ((m = n) or (m = 0))
+        FirstCombination = not ((m > n) or (m = 0))
     end function
     public function NextCombination(byref Vout)
         if Counter(m-1) < n - 1 Then
@@ -224,9 +224,9 @@ Sub RunDynamicsAndWrite(genSheet, description)
     For Each genIdx In selectedGenIndices
         genName = colName.ZS(genIdx)
 
-        ' Пытаемся взять последний снимок (MaxSnapshotIndex=1005 до 0)
+        ' Пытаемся взять последний снимок (MaxSnapshotIndex=1000 до 0)
         Set Plot = Nothing
-        For snapIdx = 1005 To 0 Step -1
+        For snapIdx = 1000 To 0 Step -1
             On Error Resume Next
             tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
             errNum = Err.Number
