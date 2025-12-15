@@ -224,9 +224,9 @@ Sub RunDynamicsAndWrite(genSheet, description)
     For Each genIdx In selectedGenIndices
         genName = colName.ZS(genIdx)
 
-        ' Пытаемся взять последний снимок (MaxSnapshotIndex=1000 до 0)
+        ' Пытаемся взять последний снимок (MaxSnapshotIndex=5 до 0)
         Set Plot = Nothing
-        For snapIdx = 1000 To 0 Step -1
+        For snapIdx = 5 To 0 Step -1
             On Error Resume Next
             tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
             errNum = Err.Number
@@ -334,7 +334,7 @@ Else
         Else
             For iScn = 0 To UBound(scenarioList)
                 scnPath = scenarioList(iScn)
-                Rastr.Load 1, scnPath, ScenarioTemplatePath
+                Rastr.Load scnPath, ScenarioTemplatePath
                 Set spFWDynamic = Rastr.FWDynamic
                 If Not spFWDynamic Is Nothing Then
                     ' Зафиксировать исходную топологию сценария и перечень ремонтных ветвей
@@ -366,17 +366,18 @@ Else
                     On Error GoTo 0
 
                     Dim selectedGenIndices()
-                    ReDim selectedGenIndices(-1)
+                    Dim genCount: genCount = 0
 
                     tblGen.SetSel("sel")
                     genIdx = tblGen.FindNextSel(-1)
                     While genIdx >= 0
-                        ReDim Preserve selectedGenIndices(UBound(selectedGenIndices) + 1)
-                        selectedGenIndices(UBound(selectedGenIndices)) = genIdx
+                        genCount = genCount + 1
+                        ReDim Preserve selectedGenIndices(genCount - 1)
+                        selectedGenIndices(genCount - 1) = genIdx
                         genIdx = tblGen.FindNextSel(genIdx)
                     Wend
 
-                    If UBound(selectedGenIndices) < 0 Then
+                    If genCount = 0 Then
                         MsgBox "Не выбрано ни одного генератора!", vbExclamation, "Нет выбора"
                         WScript.Quit
                     End If
