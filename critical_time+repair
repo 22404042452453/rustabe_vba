@@ -13,37 +13,10 @@ Set wsLog = wb.Worksheets.Add
 wsLog.Name = "Логи"
 
 Dim resultRow: resultRow = 1
+Dim TemplateFieldsAdded: TemplateFieldsAdded = 0
 
-' --- Параметры сценариев ---
-ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
-ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 MaxRepair = 2
 MaxRepair_count = 1
-
-Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
-Dim scenarioList()
-ReDim scenarioList(-1)
-
-Sub CollectScenarioFiles(folderPath)
-    For Each f In fso.GetFolder(folderPath).Files
-        If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
-            ReDim Preserve scenarioList(UBound(scenarioList) + 1)
-            scenarioList(UBound(scenarioList)) = f.Path
-        End If
-    Next
-    For Each subf In fso.GetFolder(folderPath).SubFolders
-        CollectScenarioFiles subf.Path
-    Next
-End Sub
-
-If fso.FolderExists(ScenarioFolderPath) Then
-    CollectScenarioFiles ScenarioFolderPath
-End If
-
-If UBound(scenarioList) < 0 Then
-    MsgBox "Не найдено сценариев.", vbCritical
-    WScript.Quit
-End If
 
 ' --- Ввод параметров КЗ ---
 kzNodeInput = InputBox("Введите номер узла КЗ:", "Параметры КЗ", "1133")
@@ -528,13 +501,17 @@ End Sub
 
 ' --- Prepare Template ---
 Sub PrepareTemplate
+    TemplateFieldsAdded = 0
     If spBranch.Cols.Find("Repair") < 0 Then
         spBranch.Cols.Add "Repair", PR_BOOL
         spBranch.Cols("Repair").Prop(FL_ZAG) = "Ремонт"
+        TemplateFieldsAdded = 1
     End If
     If spBranch.Cols.Find("_SortKey") < 0 Then
         spBranch.Cols.Add "_SortKey", PR_INT
+        TemplateFieldsAdded = 1
     End If
+    If TemplateFieldsAdded = 1 Then MsgBox "Добавлены поля Repair/_SortKey. Сохраните модель, если нужно.", 1, "Подготовка шаблона"
 End Sub
 
 ' --- Place Offs ---
@@ -666,39 +643,31 @@ Dim RepairComb
 Set RepairComb = new Combinator
 Dim RepComb()
 
-Dim scenarioCount: scenarioCount = 0
+' Текущий сценарий
+scenarioName = "Текущий сценарий"
 
-For iScn = 0 To UBound(scenarioList)
-    scnPath = scenarioList(iScn)
-    Rastr.Load 1, scnPath, ScenarioTemplatePath
-    Set spFWDynamic = Rastr.FWDynamic
-    If Not spFWDynamic Is Nothing Then
-        TopologyStore
-        RefreshRepairIndexes
-        scenarioCount = scenarioCount + 1
-        scenarioName = "Сценарий " & scenarioCount & ": " & scnPath
+TopologyStore
+RefreshRepairIndexes
 
-        ' Нормальная схема
-        repairDesc = "Нормальная схема"
-        RunCriticalTimeForMode scenarioName, repairDesc, powerLevels, basePgValues, selectedGenIndices
+' Нормальная схема
+repairDesc = "Нормальная схема"
+RunCriticalTimeForMode scenarioName, repairDesc, powerLevels, basePgValues, selectedGenIndices
 
-        ' Ремонты
-        If UBound(RepairIndexes) >= 0 Then
-            totalRepairs = UBound(RepairIndexes) + 1
-            For RepOff = MaxRepair_count To MaxRepair
-                RepairComb.Init RepairIndexes, RepOff, totalRepairs
-                If RepairComb.FirstCombination(RepComb) Then
-                    Do
-                        RepTitle = PlaceOffs(RepComb, RepOff)
-                        repairDesc = "Ремонт ВЛ - " & RepTitle
-                        RunCriticalTimeForMode scenarioName, repairDesc, powerLevels, basePgValues, selectedGenIndices
-                        TopologyRestore
-                    Loop While RepairComb.NextCombination(RepComb)
-                End If
-            Next
+' Ремонты
+If UBound(RepairIndexes) >= 0 Then
+    totalRepairs = UBound(RepairIndexes) + 1
+    For RepOff = MaxRepair_count To MaxRepair
+        RepairComb.Init RepairIndexes, RepOff, totalRepairs
+        If RepairComb.FirstCombination(RepComb) Then
+            Do
+                RepTitle = PlaceOffs(RepComb, RepOff)
+                repairDesc = "Ремонт ВЛ - " & RepTitle
+                RunCriticalTimeForMode scenarioName, repairDesc, powerLevels, basePgValues, selectedGenIndices
+                TopologyRestore
+            Loop While RepairComb.NextCombination(RepComb)
         End If
-    End If
-Next
+    Next
+End If
 
 Sub RunCriticalTimeForMode(scenarioName, repairDesc, powerLevels, basePgValues, selectedGenIndices)
     wsResult.Cells(resultRow, 1).Value = scenarioName
