@@ -4,7 +4,7 @@ ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
 ' Максимальные числа для Repair (как в вариантах)
-MaxRepair = 2
+MaxRepair = 4
 MaxRepair_count = 1
 
 ' --- Rastr таблицы ---
@@ -339,13 +339,13 @@ Else
         Else
             For iScn = 0 To UBound(scenarioList)
                 scnPath = scenarioList(iScn)
-                Rastr.Load scnPath, ScenarioTemplatePath
+                scenarioCount = scenarioCount + 1
+                Rastr.Load scenarioCount, scnPath, ScenarioTemplatePath
                 Set spFWDynamic = Rastr.FWDynamic
                 If Not spFWDynamic Is Nothing Then
                     ' Зафиксировать исходную топологию сценария и перечень ремонтных ветвей
                     TopologyStore
                     RefreshRepairIndexes
-                    scenarioCount = scenarioCount + 1
 
                     ' --- Выбор генераторов ---
                     Set tblGen = Rastr.Tables("Generator")
