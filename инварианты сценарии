@@ -23,7 +23,7 @@ Dim scenarioCount: scenarioCount = 0
 ' --- Предварительный поиск сценариев ---
 Dim foundScnFiles: foundScnFiles = 0
 ' Максимальный индекс снимка в цепочке .sna (будем искать с него вниз до 0)
-Const MaxSnapshotIndex = 5
+Const MaxSnapshotIndex = 500
 If fso.FolderExists(ScenarioFolderPath) Then
     For Each f In fso.GetFolder(ScenarioFolderPath).Files
         If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
