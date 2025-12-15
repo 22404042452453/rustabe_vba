@@ -4,7 +4,7 @@ ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
 ' Максимальные числа для Repair (как в вариантах)
-MaxRepair = 6
+MaxRepair = 4
 MaxRepair_count = 1
 
 ' --- Rastr таблицы ---
@@ -202,7 +202,7 @@ End Sub
 ' --- Функция расчёта динамики и записи результатов по генераторам ---
 Sub RunDynamicsAndWrite(genSheet, description)
     ' genSheet: лист wsResult, resultRow — глобальный указатель строки
-' description: строка описания УР (Repair)
+    ' description: строка описания УР (Repair)
     wsResult.Cells(resultRow, 1).Value = description
     wsResult.Cells(resultRow, 1).Font.Bold = True
     resultRow = resultRow + 1
@@ -224,9 +224,9 @@ Sub RunDynamicsAndWrite(genSheet, description)
     For Each genIdx In selectedGenIndices
         genName = colName.ZS(genIdx)
 
-        ' Пытаемся взять последний снимок (MaxSnapshotIndex=5 до 0)
+        ' Пытаемся взять последний снимок (MaxSnapshotIndex=1005 до 0)
         Set Plot = Nothing
-        For snapIdx = 5 To 0 Step -1
+        For snapIdx = 1005 To 0 Step -1
             On Error Resume Next
             tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
             errNum = Err.Number
@@ -272,11 +272,9 @@ Sub RunDynamicsAndWrite(genSheet, description)
 
                 resultRow = resultRow + 1
                 dataCol = dataCol + 3
-                End If
-
-NextScenario:
-
-            Next
+            End If
+        End If
+    Next ' Этот Next относится к For Each genIdx
 
     ' Фиксируем блок
     Dim scenarioBlockEnd: scenarioBlockEnd = resultRow - 1
