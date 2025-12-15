@@ -4,7 +4,7 @@ ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
 ' Максимальные числа для Repair (как в вариантах)
-MaxRepair = 2
+MaxRepair = 6
 MaxRepair_count = 1
 
 ' --- Rastr таблицы ---
@@ -81,27 +81,30 @@ Class Combinator
         for i = 0 to m-1
             Vout(i) = V(Counter(i))
         next
-        FirstCombination = not ((m > n) or (m = 0))
+        FirstCombination = not ((m = n) or (m = 0))
     end function
     public function NextCombination(byref Vout)
-        dim i
-        i = m - 1
-        while i >= 0
-            if Counter(i) < n - m + i Then
-                Counter(i) = Counter(i) + 1
-                for j = i + 1 to m - 1
-                    Counter(j) = Counter(i) + j - i
-                next
-                Redim Vout(m-1)
-                for k = 0 to m-1
-                    Vout(k) = V(Counter(k))
-                next
-                NextCombination = 1
-                exit function
-            end if
-            i = i - 1
-        wend
-        NextCombination = 0
+        if Counter(m-1) < n - 1 Then
+            Counter(m-1) = Counter(m-1) + 1
+        Else
+            for i = m-2 to 0 step -1
+                if Counter(i) < n - m + 1 Then
+                    Counter(i) = Counter(i) + 1
+                    for j = i + 1 to m - 1
+                        Counter(j) = Counter(j-1) + 1
+                    next
+                End If
+            next
+        End if
+        Redim Vout(m-1)
+        for i = 0 to m-1
+            Vout(i) = V(Counter(i))
+        next
+        if Counter(0) = n - m Then
+            NextCombination = 0
+        Else
+            NextCombination = 1
+        End If
     end function
 End Class
 
@@ -226,9 +229,9 @@ Sub RunDynamicsAndWrite(genSheet, description)
     For i = 0 To tblGen.Size - 1
         genName = colName.ZS(i)
 
-        ' Пытаемся взять последний снимок (MaxSnapshotIndex=1000 до 0)
+        ' Пытаемся взять последний снимок (MaxSnapshotIndex=5 до 0)
         Set Plot = Nothing
-        For snapIdx = 1000 To 0 Step -1
+        For snapIdx = 5 To 0 Step -1
             On Error Resume Next
             tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
             errNum = Err.Number
@@ -336,13 +339,13 @@ Else
         Else
             For iScn = 0 To UBound(scenarioList)
                 scnPath = scenarioList(iScn)
-                scenarioCount = scenarioCount + 1
-                Rastr.Load scenarioCount, scnPath, ScenarioTemplatePath
+                Rastr.Load 1, scnPath, ScenarioTemplatePath
                 Set spFWDynamic = Rastr.FWDynamic
                 If Not spFWDynamic Is Nothing Then
                     ' Зафиксировать исходную топологию сценария и перечень ремонтных ветвей
                     TopologyStore
                     RefreshRepairIndexes
+                    scenarioCount = scenarioCount + 1
                     wsData.Cells.Clear
 
                     ' Заголовок сценария
@@ -369,7 +372,16 @@ Else
                                 RunDynAndWriteSafe "УР: Ремонт ВЛ - " & RepTitle
                                 ' Восстанавливаем топологию после комбинации
                                 TopologyRestore
-                            Loop While RepairComb.NextCombination(RepComb)
+
+                                hasNext = RepairComb.NextCombination(RepComb)
+                                If hasNext = 0 Then
+                                    ' Отработать последнюю комбинацию, которую NextCombination уже сформировал
+                                    RepTitle = PlaceOffs(RepComb, RepOff)
+                                    RunDynAndWriteSafe "УР: Ремонт ВЛ - " & RepTitle
+                                    TopologyRestore
+                                    Exit Do
+                                End If
+                            Loop
                         End If
                     Next
 
