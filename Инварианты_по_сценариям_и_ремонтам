@@ -229,9 +229,9 @@ Sub RunDynamicsAndWrite(genSheet, description)
     For i = 0 To tblGen.Size - 1
         genName = colName.ZS(i)
 
-        ' Пытаемся взять последний снимок (MaxSnapshotIndex=1000 до 0)
+        ' Пытаемся взять последний снимок (MaxSnapshotIndex=5 до 0)
         Set Plot = Nothing
-        For snapIdx = 1000 To 0 Step -1
+        For snapIdx = 5 To 0 Step -1
             On Error Resume Next
             tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
             errNum = Err.Number
@@ -339,14 +339,13 @@ Else
         Else
             For iScn = 0 To UBound(scenarioList)
                 scnPath = scenarioList(iScn)
-                Rastr.Load 1, scnPath, ScenarioTemplatePath
+                scenarioCount = scenarioCount + 1
+                Rastr.Load scenarioCount, scnPath, ScenarioTemplatePath
                 Set spFWDynamic = Rastr.FWDynamic
                 If Not spFWDynamic Is Nothing Then
                     ' Зафиксировать исходную топологию сценария и перечень ремонтных ветвей
                     TopologyStore
                     RefreshRepairIndexes
-
-                    scenarioCount = scenarioCount + 1
                     wsData.Cells.Clear
 
                     ' Заголовок сценария
