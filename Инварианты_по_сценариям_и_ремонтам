@@ -4,7 +4,7 @@ ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
 ' Максимальные числа для Repair (как в вариантах)
-MaxRepair = 6
+MaxRepair = 2
 MaxRepair_count = 1
 
 ' --- Rastr таблицы ---
@@ -229,9 +229,9 @@ Sub RunDynamicsAndWrite(genSheet, description)
     For i = 0 To tblGen.Size - 1
         genName = colName.ZS(i)
 
-        ' Пытаемся взять последний снимок (MaxSnapshotIndex=5 до 0)
+        ' Пытаемся взять последний снимок (MaxSnapshotIndex=1000 до 0)
         Set Plot = Nothing
-        For snapIdx = 5 To 0 Step -1
+        For snapIdx = 1000 To 0 Step -1
             On Error Resume Next
             tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
             errNum = Err.Number
