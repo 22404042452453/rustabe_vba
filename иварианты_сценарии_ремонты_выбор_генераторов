@@ -334,7 +334,7 @@ Else
         Else
             For iScn = 0 To UBound(scenarioList)
                 scnPath = scenarioList(iScn)
-                Rastr.Load scnPath, ScenarioTemplatePath
+                Rastr.Load 1,  scnPath, ScenarioTemplatePath
                 Set spFWDynamic = Rastr.FWDynamic
                 If Not spFWDynamic Is Nothing Then
                     ' Зафиксировать исходную топологию сценария и перечень ремонтных ветвей
