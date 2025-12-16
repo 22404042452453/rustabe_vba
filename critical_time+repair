@@ -43,9 +43,6 @@ Dim kzBaseDuration: kzBaseDuration = CDbl(kzBaseDurationInput)
 ' --- Глобальная переменная для индекса события КЗ ---
 Dim g_ScenarioRowIndex: g_ScenarioRowIndex = -1
 
-' --- Глобальная переменная для snapshot ---
-Dim g_LastUsedSnapshot: g_LastUsedSnapshot = -1
-
 ' --- Rastr таблицы ---
 Set spBranch = Rastr.Tables("vetv")
 Set spNode   = Rastr.Tables("node")
@@ -164,8 +161,6 @@ Function GetMaxDelta()
         End If
     Next
 
-    g_LastUsedSnapshot = lastSnapIdx
-
     GetMaxDelta = maxDelta
 End Function
 
@@ -176,26 +171,16 @@ Function GetGenMaxDelta(genIndex)
     npoints = 0
     wsData.Cells.Clear
 
-    If g_LastUsedSnapshot >= 0 Then
+    For snapIdx = 5 To 0 Step -1
         On Error Resume Next
-        Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, g_LastUsedSnapshot)
+        Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, snapIdx)
         errNum = Err.Number
         If errNum = 0 And IsArray(Plot) Then
             npoints = UBound(Plot, 1) + 1
+            If npoints > 0 Then Exit For
         End If
         On Error GoTo 0
-    Else
-        For snapIdx = 5 To 0 Step -1
-            On Error Resume Next
-            Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, snapIdx)
-            errNum = Err.Number
-            If errNum = 0 And IsArray(Plot) Then
-                npoints = UBound(Plot, 1) + 1
-                If npoints > 0 Then Exit For
-            End If
-            On Error GoTo 0
-        Next
-    End If
+    Next
 
     If errNum = 0 And IsArray(Plot) And npoints > 0 Then
         wsData.Cells(2, 1).Resize(npoints, 2).Value = Plot
