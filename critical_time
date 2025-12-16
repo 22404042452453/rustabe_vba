@@ -539,7 +539,7 @@ For pIdx = 0 To UBound(powerLevels)
                 If anyViolation Then
                     tCritical = BinarySearchCriticalTime(powerLevel, basePgValues, selectedGenIndices)
                     If IsNumeric(tCritical) And tCritical >= 0 Then
-                        tCriticalForRows = FormatNumber(CDbl(tCritical), 3)
+                        tCriticalForRows = FormatNumber(CDbl(tCritical)/1000, 3)
                     Else
                         tCriticalForRows = "Ошибка поиска"
                     End If
