@@ -147,11 +147,7 @@ Function GetMaxDelta()
         If errNum = 0 And IsArray(Plot) And npoints > 0 Then
             wsData.Cells(2, dataCol).Resize(npoints, 2).Value = Plot
 
-            deltaStartAddr = wsData.Cells(2, dataCol).Address(False, False, 1, True)
-            deltaEndAddr = wsData.Cells(npoints + 1, dataCol).Address(False, False, 1, True)
-            deltaRange = deltaStartAddr & ":" & deltaEndAddr
-
-            wsData.Cells(2, dataCol + 2).Formula = "=MAX(" & deltaRange & ")"
+            wsData.Cells(2, dataCol + 2).Formula = "=MAX(B2:B" & (npoints + 1) & ")"
             xl.Calculate
 
             maxGen = Abs(wsData.Cells(2, dataCol + 2).Value)
@@ -185,11 +181,7 @@ Function GetGenMaxDelta(genIndex)
     If errNum = 0 And IsArray(Plot) And npoints > 0 Then
         wsData.Cells(2, 1).Resize(npoints, 2).Value = Plot
 
-        deltaStartAddr = wsData.Cells(2, 1).Address(False, False, 1, True)
-        deltaEndAddr = wsData.Cells(npoints + 1, 1).Address(False, False, 1, True)
-        deltaRange = deltaStartAddr & ":" & deltaEndAddr
-
-        wsData.Cells(2, 3).Formula = "=MAX(" & deltaRange & ")"
+        wsData.Cells(2, 3).Formula = "=MAX(B2:B" & (npoints + 1) & ")"
         xl.Calculate
 
         maxDelta = Abs(wsData.Cells(2, 3).Value)
