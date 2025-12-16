@@ -43,6 +43,9 @@ Dim kzBaseDuration: kzBaseDuration = CDbl(kzBaseDurationInput)
 ' --- Глобальная переменная для индекса события КЗ ---
 Dim g_ScenarioRowIndex: g_ScenarioRowIndex = -1
 
+' --- Глобальная переменная для snapshot ---
+Dim g_LastUsedSnapshot: g_LastUsedSnapshot = -1
+
 ' --- Rastr таблицы ---
 Set spBranch = Rastr.Tables("vetv")
 Set spNode   = Rastr.Tables("node")
@@ -147,7 +150,11 @@ Function GetMaxDelta()
         If errNum = 0 And IsArray(Plot) And npoints > 0 Then
             wsData.Cells(2, dataCol).Resize(npoints, 2).Value = Plot
 
-            wsData.Cells(2, dataCol + 2).Formula = "=MAX(B2:B" & (npoints + 1) & ")"
+            deltaStartAddr = wsData.Cells(2, dataCol).Address(False, False, 1, True)
+            deltaEndAddr = wsData.Cells(npoints + 1, dataCol).Address(False, False, 1, True)
+            deltaRange = deltaStartAddr & ":" & deltaEndAddr
+
+            wsData.Cells(2, dataCol + 2).Formula = "=MAX(" & deltaRange & ")"
             xl.Calculate
 
             maxGen = Abs(wsData.Cells(2, dataCol + 2).Value)
@@ -156,6 +163,8 @@ Function GetMaxDelta()
             dataCol = dataCol + 3
         End If
     Next
+
+    g_LastUsedSnapshot = lastSnapIdx
 
     GetMaxDelta = maxDelta
 End Function
@@ -167,21 +176,35 @@ Function GetGenMaxDelta(genIndex)
     npoints = 0
     wsData.Cells.Clear
 
-    For snapIdx = 5 To 0 Step -1
+    If g_LastUsedSnapshot >= 0 Then
         On Error Resume Next
-        Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, snapIdx)
+        Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, g_LastUsedSnapshot)
         errNum = Err.Number
         If errNum = 0 And IsArray(Plot) Then
             npoints = UBound(Plot, 1) + 1
-            If npoints > 0 Then Exit For
         End If
         On Error GoTo 0
-    Next
+    Else
+        For snapIdx = 5 To 0 Step -1
+            On Error Resume Next
+            Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, snapIdx)
+            errNum = Err.Number
+            If errNum = 0 And IsArray(Plot) Then
+                npoints = UBound(Plot, 1) + 1
+                If npoints > 0 Then Exit For
+            End If
+            On Error GoTo 0
+        Next
+    End If
 
     If errNum = 0 And IsArray(Plot) And npoints > 0 Then
         wsData.Cells(2, 1).Resize(npoints, 2).Value = Plot
 
-        wsData.Cells(2, 3).Formula = "=MAX(B2:B" & (npoints + 1) & ")"
+        deltaStartAddr = wsData.Cells(2, 1).Address(False, False, 1, True)
+        deltaEndAddr = wsData.Cells(npoints + 1, 1).Address(False, False, 1, True)
+        deltaRange = deltaStartAddr & ":" & deltaEndAddr
+
+        wsData.Cells(2, 3).Formula = "=MAX(" & deltaRange & ")"
         xl.Calculate
 
         maxDelta = Abs(wsData.Cells(2, 3).Value)
