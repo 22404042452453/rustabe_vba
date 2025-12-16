@@ -130,7 +130,7 @@ Function GetMaxDelta()
         Plot = Empty
         npoints = 0
 
-        For snapIdx = 5 To 0 Step -1
+        For snapIdx = 500 To 0 Step -1
             On Error Resume Next
             Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", i, snapIdx)
             errNum = Err.Number
@@ -171,7 +171,7 @@ Function GetGenMaxDelta(genIndex)
     npoints = 0
     wsData.Cells.Clear
 
-    For snapIdx = 5 To 0 Step -1
+    For snapIdx = 500 To 0 Step -1
         On Error Resume Next
         Plot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIndex, snapIdx)
         errNum = Err.Number
@@ -737,7 +737,7 @@ Sub RunCriticalTimeForMode(scenarioName, repairDesc, powerLevels, basePgValues, 
                         wsResult.Cells(resultRow, 2).Value = ""
                         wsResult.Cells(resultRow, 3).Value = powerLevel & "%"
                         wsResult.Cells(resultRow, 4).Value = genName
-                        wsResult.Cells(resultRow, 5).Value = FormatNumber(genMaxDeltas(g), 3)
+                        wsResult.Cells(resultRow, 5).Value = genMaxDeltas(g)
                         If genMaxDeltas(g) > 360 Then
                             wsResult.Cells(resultRow, 6).Value = "Нарушение устойчивости"
                         Else
