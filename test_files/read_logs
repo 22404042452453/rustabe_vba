@@ -8,6 +8,10 @@ Set wb = xl.Workbooks.Add
 Set ws = wb.Worksheets(1)
 ws.Name = "Блокировки АР"
 
+' Добавляем вкладку для всех данных
+Set wsData = wb.Worksheets.Add
+wsData.Name = "Данные"
+
 ' Заголовки
 ws.Cells(1, 1).Value = "№"
 ws.Cells(1, 2).Value = "Сценарий"
@@ -39,7 +43,13 @@ If Not spFWDynamic Is Nothing Then
         If UBound(msgLines) = -1 Then
             msgLines = Split(resultMsg, vbLf)
         End If
-        
+
+        ' Выгружаем все строки на вкладку "Данные"
+        For i = 0 To UBound(msgLines)
+            wsData.Cells(i+1, 1).Value = Trim(msgLines(i))
+        Next
+        wsData.Columns.AutoFit
+
         ' Обрабатываем каждую строку
         For i = 0 To UBound(msgLines)
             logLine = Trim(msgLines(i))
@@ -128,6 +138,7 @@ End If
 ' Очистка
 xl.DisplayAlerts = True
 Set ws = Nothing
+Set wsData = Nothing
 Set wb = Nothing
 Set xl = Nothing
 Set spFWDynamic = Nothing
@@ -150,6 +161,10 @@ Set spFWDynamic = Nothing
 'Set wb = xl.Workbooks.Add
 'Set ws = wb.Worksheets(1)
 'ws.Name = "Блокировки АР"
+
+' Добавляем вкладку для всех данных
+'Set wsData = wb.Worksheets.Add
+'wsData.Name = "Данные"
 
 ' Заголовки
 'ws.Cells(1, 1).Value = "№"
@@ -187,7 +202,13 @@ Set spFWDynamic = Nothing
 '                        resultMsg = spFWDynamic.ResultMessage
 '                        msgLines = Split(resultMsg, vbCrLf)
 '                        If UBound(msgLines) = -1 Then msgLines = Split(resultMsg, vbLf)
-'                        
+
+'                        ' Выгружаем все строки на вкладку "Данные"
+'                        For i = 0 To UBound(msgLines)
+'                            wsData.Cells(i+1, 1).Value = Trim(msgLines(i))
+'                        Next
+'                        wsData.Columns.AutoFit
+'
 '                        For i = 0 To UBound(msgLines)
 '                            logLine = Trim(msgLines(i))
 '                            
