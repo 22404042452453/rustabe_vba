@@ -1,0 +1,177 @@
+' --- Поиск логов о блокировке фиксации АР при расчете динамики ---
+
+' Путь для сохранения результатов
+OutputFilePath = "C:\Users\k.marchuk\Desktop\AR_Blocking_Logs.txt"
+
+' Инициализация FileSystemObject
+Set fso = CreateObject("Scripting.FileSystemObject")
+
+' Получаем протокол RastrWin
+Set Protocol = Rastr.Protocol
+
+If Protocol Is Nothing Then
+    MsgBox "Протокол недоступен", vbCritical, "Ошибка"
+Else
+    ' Счетчик найденных записей
+    foundCount = 0
+    resultsText = "=== Логи блокировки фиксации АР ===" & vbCrLf & vbCrLf
+    
+    ' Проходим по всем строкам протокола
+    For i = 0 To Protocol.Count - 1
+        logLine = Protocol.Item(i)
+        
+        ' Ищем строки с блокировкой АР по изменению угла
+        If InStr(1, logLine, "Блокировка фиксации АР", vbTextCompare) > 0 And _
+           InStr(1, logLine, "угол", vbTextCompare) > 0 And _
+           InStr(1, logLine, "превысил", vbTextCompare) > 0 Then
+            
+            foundCount = foundCount + 1
+            resultsText = resultsText & foundCount & ". " & logLine & vbCrLf
+        End If
+    Next
+    
+    ' Вывод результатов
+    If foundCount > 0 Then
+        resultsText = resultsText & vbCrLf & "Всего найдено записей: " & foundCount
+        
+        ' Сохранение в файл
+        On Error Resume Next
+        Set outFile = fso.CreateTextFile(OutputFilePath, True)
+        If Err.Number = 0 Then
+            outFile.WriteLine resultsText
+            outFile.Close
+            MsgBox "Найдено записей: " & foundCount & vbCrLf & vbCrLf & _
+                   "Результаты сохранены в:" & vbCrLf & OutputFilePath, _
+                   vbInformation, "Поиск завершен"
+        Else
+            MsgBox resultsText, vbInformation, "Результаты поиска (файл не создан)"
+        End If
+        On Error GoTo 0
+    Else
+        MsgBox "Записи о блокировке фиксации АР не найдены в протоколе", _
+               vbInformation, "Поиск завершен"
+    End If
+End If
+
+' Очистка
+Set Protocol = Nothing
+Set fso = Nothing
+
+
+' ============================================================
+' РАСШИРЕННАЯ ВЕРСИЯ с фильтрацией и экспортом в Excel
+' ============================================================
+
+Sub SearchARBlockingLogsToExcel()
+    ' Путь для сохранения Excel-файла
+    ExcelOutputPath = "C:\Users\k.marchuk\Desktop\AR_Blocking_Analysis.xlsx"
+    
+    ' Инициализация
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set Protocol = Rastr.Protocol
+    
+    If Protocol Is Nothing Then
+        MsgBox "Протокол недоступен", vbCritical, "Ошибка"
+        Exit Sub
+    End If
+    
+    ' Создаем Excel
+    Set xl = CreateObject("Excel.Application")
+    xl.Visible = True
+    xl.DisplayAlerts = False
+    Set wb = xl.Workbooks.Add
+    Set ws = wb.Worksheets(1)
+    ws.Name = "Блокировки АР"
+    
+    ' Заголовки
+    ws.Cells(1, 1).Value = "№"
+    ws.Cells(1, 2).Value = "Полный текст лога"
+    ws.Cells(1, 3).Value = "Линия"
+    ws.Cells(1, 4).Value = "Угол"
+    ws.Cells(1, 5).Value = "Цикл АР"
+    ws.Cells(1, 6).Value = "Время (t)"
+    ws.Range("A1:F1").Font.Bold = True
+    
+    ' Поиск и парсинг логов
+    rowNum = 2
+    For i = 0 To Protocol.Count - 1
+        logLine = Protocol.Item(i)
+        
+        If InStr(1, logLine, "Блокировка фиксации АР", vbTextCompare) > 0 And _
+           InStr(1, logLine, "угол", vbTextCompare) > 0 And _
+           InStr(1, logLine, "превысил", vbTextCompare) > 0 Then
+            
+            ' Записываем полный текст
+            ws.Cells(rowNum, 1).Value = rowNum - 1
+            ws.Cells(rowNum, 2).Value = logLine
+            
+            ' Парсим данные из строки
+            ' Пример: "Блокировка фиксации АР по изменению угла внутри шага: угол по линии 1110-2020 (0) превысил 180 (цикл АР 1) при t=1,5"
+            
+            ' Извлекаем линию (формат XXXX-YYYY)
+            Set regexLine = CreateObject("VBScript.RegExp")
+            regexLine.Pattern = "линии\s+(\d+-\d+)"
+            regexLine.IgnoreCase = True
+            If regexLine.Test(logLine) Then
+                Set matchLine = regexLine.Execute(logLine)
+                ws.Cells(rowNum, 3).Value = matchLine(0).SubMatches(0)
+            End If
+            
+            ' Извлекаем угол (число перед "превысил")
+            Set regexAngle = CreateObject("VBScript.RegExp")
+            regexAngle.Pattern = "превысил\s+(\d+)"
+            regexAngle.IgnoreCase = True
+            If regexAngle.Test(logLine) Then
+                Set matchAngle = regexAngle.Execute(logLine)
+                ws.Cells(rowNum, 4).Value = CDbl(matchAngle(0).SubMatches(0))
+            End If
+            
+            ' Извлекаем цикл АР
+            Set regexCycle = CreateObject("VBScript.RegExp")
+            regexCycle.Pattern = "цикл АР\s+(\d+)"
+            regexCycle.IgnoreCase = True
+            If regexCycle.Test(logLine) Then
+                Set matchCycle = regexCycle.Execute(logLine)
+                ws.Cells(rowNum, 5).Value = CInt(matchCycle(0).SubMatches(0))
+            End If
+            
+            ' Извлекаем время (t=X,X или t=X.X)
+            Set regexTime = CreateObject("VBScript.RegExp")
+            regexTime.Pattern = "при\s+t\s*=\s*([0-9]+[,.]?[0-9]*)"
+            regexTime.IgnoreCase = True
+            If regexTime.Test(logLine) Then
+                Set matchTime = regexTime.Execute(logLine)
+                timeStr = matchTime(0).SubMatches(0)
+                timeStr = Replace(timeStr, ",", ".")
+                ws.Cells(rowNum, 6).Value = CDbl(timeStr)
+            End If
+            
+            rowNum = rowNum + 1
+        End If
+    Next
+    
+    ' Форматирование
+    ws.Columns.AutoFit
+    
+    ' Сохранение
+    On Error Resume Next
+    wb.SaveAs ExcelOutputPath
+    If Err.Number = 0 Then
+        MsgBox "Найдено записей: " & (rowNum - 2) & vbCrLf & vbCrLf & _
+               "Результаты сохранены в:" & vbCrLf & ExcelOutputPath, _
+               vbInformation, "Анализ завершен"
+    Else
+        MsgBox "Найдено записей: " & (rowNum - 2) & vbCrLf & _
+               "Ошибка сохранения файла: " & Err.Description, _
+               vbExclamation, "Анализ завершен"
+    End If
+    On Error GoTo 0
+    
+    ' Очистка
+    xl.DisplayAlerts = True
+    Set ws = Nothing
+    Set wb = Nothing
+    Set xl = Nothing
+    Set Protocol = Nothing
+    Set fso = Nothing
+End Sub
