@@ -55,15 +55,15 @@ If Not spFWDynamic Is Nothing Then
                 ws.Cells(rowNum, 2).Value = "Текущий расчет"
                 ws.Cells(rowNum, 3).Value = logLine
                 
-                ' Определяем тип сообщения
-                Dim msgType As String
-                If InStr(1, logLine, "по линии", vbTextCompare) > 0 Then
-                    msgType = "Линия"
-                ElseIf InStr(1, logLine, "генератора", vbTextCompare) > 0 Then
-                    msgType = "Генератор"
-                Else
-                    msgType = "Неизвестно"
-                End If
+                                ' Определяем тип сообщения
+                                Dim msgType
+                                If InStr(1, logLine, "по линии", vbTextCompare) > 0 Then
+                                    msgType = "Линия"
+                                ElseIf InStr(1, logLine, "генератора", vbTextCompare) > 0 Then
+                                    msgType = "Генератор"
+                                Else
+                                    msgType = "Неизвестно"
+                                End If
                 ws.Cells(rowNum, 9).Value = msgType
 
                 ' Парсим данные в зависимости от типа
@@ -225,7 +225,7 @@ Set spFWDynamic = Nothing
 '                                ws.Cells(rowNum, 3).Value = logLine
 '                                
 '                                ' Определяем тип сообщения
-'                                Dim msgType As String
+'                                Dim msgType
 '                                If InStr(1, logLine, "по линии", vbTextCompare) > 0 Then
 '                                    msgType = "Линия"
 '                                ElseIf InStr(1, logLine, "генератора", vbTextCompare) > 0 Then
@@ -307,4 +307,3 @@ Set spFWDynamic = Nothing
 '    Set xl = Nothing
 '    Set fso = Nothing
 'End If
-
