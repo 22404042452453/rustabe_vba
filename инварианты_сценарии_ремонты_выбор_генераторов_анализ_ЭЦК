@@ -98,6 +98,9 @@ End Sub
 
 WriteLog "Скрипт запущен"
 
+' --- Подготовка шаблона ---
+PrepareTemplate
+
 ' Проверка наличия обязательных колонок
 On Error Resume Next
 Set spBranchSel = spBranch.Cols("Report")
@@ -107,6 +110,24 @@ If Err.Number <> 0 Then
     WScript.Quit
 End If
 On Error GoTo 0
+
+Sub PrepareTemplate
+    TemplateFieldsAdded = 0
+    if spBranch.Cols.Find("Repair") < 0 Then
+        spBranch.Cols.Add "Repair", PR_BOOL
+        spBranch.Cols("Repair").Prop(FL_ZAG) = "Ремонт"
+        TemplateFieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("Report") < 0 Then
+        spBranch.Cols.Add "Report", PR_BOOL
+        spBranch.Cols("Report").Prop(FL_ZAG) = "Отчет"
+        TemplateFieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("_SortKey") < 0 Then
+        spBranch.Cols.Add "_SortKey", PR_INT
+    End if
+    if TemplateFieldsAdded = 1 Then MsgBox "Добавлены поля Repair/Report. Сохраните модель, если нужно.",1,"Подготовка шаблона"
+End Sub
 
 Set spBranchIp  = spBranch.Cols("ip")
 Set spBranchIq  = spBranch.Cols("iq")
