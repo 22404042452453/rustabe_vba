@@ -4,7 +4,7 @@
 ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
-MaxRepair = 2
+MaxRepair = 4
 MaxRepair_count = 1
 
 ' --- Rastr таблицы ---
@@ -67,10 +67,18 @@ Dim alarRow: alarRow = 2
 
 ' === ФУНКЦИЯ ЛОГИРОВАНИЯ ===
 Sub WriteLog(msg)
+    On Error Resume Next
+    If IsEmpty(msg) Or IsNull(msg) Then msg = "[пустое сообщение]"
     wsLog.Cells(logRow, 1).Value = Now()
-    wsLog.Cells(logRow, 2).Value = msg
+    wsLog.Cells(logRow, 2).Value = CStr(msg)
     logRow = logRow + 1
-    wb.Save
+    ' Убираем частое сохранение
+    ' wb.Save
+    If Err.Number <> 0 Then
+        MsgBox "Ошибка логирования: " & Err.Description & vbCrLf & "Сообщение: " & msg
+        Err.Clear
+    End If
+    On Error GoTo 0
 End Sub
 
 ' === ФУНКЦИЯ СОХРАНЕНИЯ ===
