@@ -3,9 +3,14 @@
 ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
-' Максимальные числа для Repair (как в вариантах)
+' Максимальные числа для Repair
 MaxRepair = 2
 MaxRepair_count = 1
+
+' Параметры динамики (ДОБАВЛЕНО)
+Dim DynamicTimeStep: DynamicTimeStep = 0.01  ' Шаг интегрирования, сек
+Dim DynamicTimeTotal: DynamicTimeTotal = 10.0 ' Общее время моделирования, сек
+Dim DynamicMethod: DynamicMethod = 1         ' Метод интегрирования (1 - явный, 2 - неявный)
 
 ' --- Rastr таблицы ---
 Set spBranch = Rastr.Tables("vetv")
@@ -22,6 +27,16 @@ Set wsResult = wb.Worksheets.Add
 wsResult.Name = "Результаты"
 Set wsALAR = wb.Worksheets.Add
 wsALAR.Name = "Рекомендации АЛАР"
+Set wsDiag = wb.Worksheets.Add
+wsDiag.Name = "Диагностика"
+
+' Заголовок диагностики
+wsDiag.Cells(1, 1).Value = "Сценарий"
+wsDiag.Cells(1, 2).Value = "Статус FWDynamic"
+wsDiag.Cells(1, 3).Value = "Параметры динамики"
+wsDiag.Cells(1, 4).Value = "Ошибки"
+wsDiag.Range("A1:D1").Font.Bold = True
+Dim diagRow: diagRow = 2
 
 ' Заголовок для листа АЛАР
 wsALAR.Cells(1, 1).Value = "Сценарий"
@@ -169,69 +184,126 @@ Function PlaceOffs (byref V, OffCounter)
             spBranchSta.Calc 1
             spBranch.SetSel ""
         End If
-        if(OffList <> "") Then OffList = OffList + "|" 
+        if(OffList <> "") Then OffList = OffList + "|"
         OffList = OffList + Cstr(spBranchNm.ZS(V(offc)))
     next
     PlaceOffs = OffList
 End function
 
-' --- НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ЭЦК ---
+' НОВАЯ: Функция инициализации и проверки динамики
+Function InitializeDynamics(scenarioName)
+    Dim diagMsg: diagMsg = ""
 
-' Функция парсинга лога для поиска ЭЦК
-Function ParseECKFromLog()
-    Dim eckData: Set eckData = CreateObject("Scripting.Dictionary")
-    
+    ' Проверка доступности объекта FWDynamic
     On Error Resume Next
-    logPath = Rastr.FWDynamic.GetLogFilePath() ' или другой метод получения пути к логу
-    If Err.Number <> 0 Then
-        ' Попробуем альтернативный путь
-        logPath = Rastr.FWDynamic.LogFile
+    Set spFWDynamic = Rastr.FWDynamic
+    If Err.Number <> 0 Or spFWDynamic Is Nothing Then
+        diagMsg = "FWDynamic недоступен: " & Err.Description
+        wsDiag.Cells(diagRow, 1).Value = scenarioName
+        wsDiag.Cells(diagRow, 2).Value = "Ошибка"
+        wsDiag.Cells(diagRow, 4).Value = diagMsg
+        diagRow = diagRow + 1
+        InitializeDynamics = False
+        Exit Function
     End If
     On Error GoTo 0
-    
-    If logPath = "" Or IsNull(logPath) Then
-        Set ParseECKFromLog = eckData
-        Exit Function
+
+    ' Попытка инициализации параметров динамики
+    On Error Resume Next
+
+    ' Метод 1: Через свойства объекта
+    spFWDynamic.TimeStep = DynamicTimeStep
+    spFWDynamic.TimeTotal = DynamicTimeTotal
+    spFWDynamic.Method = DynamicMethod
+
+    ' Метод 2: Через Init (если доступен)
+    If Err.Number <> 0 Then
+        Err.Clear
+        spFWDynamic.Init DynamicTimeStep, DynamicTimeTotal
     End If
-    
+
+    ' Метод 3: Через SetParam (альтернативный)
+    If Err.Number <> 0 Then
+        Err.Clear
+        spFWDynamic.SetParam "TimeStep", DynamicTimeStep
+        spFWDynamic.SetParam "TimeTotal", DynamicTimeTotal
+    End If
+
+    initErr = Err.Number
+    initDesc = Err.Description
+    On Error GoTo 0
+
+    If initErr <> 0 Then
+        diagMsg = "Ошибка инициализации: " & initDesc
+        wsDiag.Cells(diagRow, 1).Value = scenarioName
+        wsDiag.Cells(diagRow, 2).Value = "Инициализация провалена"
+        wsDiag.Cells(diagRow, 3).Value = "dt=" & DynamicTimeStep & ", T=" & DynamicTimeTotal
+        wsDiag.Cells(diagRow, 4).Value = diagMsg
+        diagRow = diagRow + 1
+    Else
+        diagMsg = "Инициализация успешна"
+        wsDiag.Cells(diagRow, 1).Value = scenarioName
+        wsDiag.Cells(diagRow, 2).Value = "OK"
+        wsDiag.Cells(diagRow, 3).Value = "dt=" & DynamicTimeStep & ", T=" & DynamicTimeTotal
+        wsDiag.Cells(diagRow, 4).Value = diagMsg
+        diagRow = diagRow + 1
+    End If
+
+    InitializeDynamics = True
+End Function
+
+' --- ИСПРАВЛЕННАЯ ФУНКЦИЯ ПАРСИНГА ЭЦК ---
+Function ParseECKFromLog(logPath)
+    Dim eckData: Set eckData = CreateObject("Scripting.Dictionary")
+
     Set fso = CreateObject("Scripting.FileSystemObject")
-    If Not fso.FileExists(logPath) Then
+    If logPath = "" Or IsNull(logPath) Or Not fso.FileExists(logPath) Then
         Set ParseECKFromLog = eckData
         Exit Function
     End If
-    
+
     Set logFile = fso.OpenTextFile(logPath, 1)
     Do Until logFile.AtEndOfStream
         line = logFile.ReadLine
-        
-        ' Ищем строки с ЭЦК - примеры форматов:
-        ' "ЭЦК между узлами 123 и 456"
-        ' "Эквивалентный центр качаний: узел 123 - узел 456"
-        ' "Swing center between nodes 123 and 456"
-        
-        If InStr(line, "ЭЦК") > 0 Or InStr(line, "центр качан") > 0 Or _
-           InStr(line, "Swing center") > 0 Or InStr(line, "swing") > 0 Then
-            
-            ' Извлекаем номера узлов (ищем числа в строке)
-            Set regEx = New RegExp
-            regEx.Global = True
-            regEx.Pattern = "\d+"
-            Set matches = regEx.Execute(line)
-            
-            If matches.Count >= 2 Then
-                node1 = CInt(matches(0).Value)
-                node2 = CInt(matches(1).Value)
-                
-                ' Сохраняем пару узлов
-                eckKey = node1 & "-" & node2
-                If Not eckData.Exists(eckKey) Then
-                    eckData.Add eckKey, Array(node1, node2)
+
+        If InStr(line, "Угол по линии") > 0 And InStr(line, "превысил 180") > 0 Then
+            startPos = InStr(line, "Угол по линии") + Len("Угол по линии")
+            endPos = InStr(startPos, line, "(")
+
+            If endPos > startPos Then
+                nodesPart = Trim(Mid(line, startPos, endPos - startPos))
+                dashPos = InStr(nodesPart, "-")
+
+                If dashPos > 0 Then
+                    node1Str = Trim(Left(nodesPart, dashPos - 1))
+                    node2Str = Trim(Mid(nodesPart, dashPos + 1))
+
+                    On Error Resume Next
+                    node1 = CLng(node1Str)
+                    node2 = CLng(node2Str)
+
+                    If Err.Number = 0 And node1 > 0 And node2 > 0 Then
+                        eckKey = node1 & "-" & node2
+                        If Not eckData.Exists(eckKey) Then
+                            timeStr = ""
+                            timePos = InStr(line, "при t=")
+                            If timePos > 0 Then
+                                timeStr = Mid(line, timePos + 6)
+                                spacePos = InStr(timeStr, " ")
+                                If spacePos > 0 Then
+                                    timeStr = Left(timeStr, spacePos - 1)
+                                End If
+                            End If
+                            eckData.Add eckKey, Array(node1, node2, timeStr, line)
+                        End If
+                    End If
+                    On Error GoTo 0
                 End If
             End If
         End If
     Loop
     logFile.Close
-    
+
     Set ParseECKFromLog = eckData
 End Function
 
@@ -667,6 +739,7 @@ End If
 
 wsResult.Columns.AutoFit
 wsALAR.Columns.AutoFit
+wsDiag.Columns.AutoFit
 
 MsgBox "Обработка завершена. Сценариев: " & scenarioCount & vbCrLf & _
        "Нарушений устойчивости: " & (alarRow - 2), vbInformation, "Готово"
