@@ -38,9 +38,6 @@ If Not spFWDynamic Is Nothing Then
         ' Получаем результирующее сообщение
         resultMsg = spFWDynamic.ResultMessage
 
-        ' Выводим все логи в консоль
-        WScript.Echo resultMsg
-
         ' Сохраняем resultMsg в файл для анализа
         Dim fso
         Set fso = CreateObject("Scripting.FileSystemObject")
@@ -48,12 +45,17 @@ If Not spFWDynamic Is Nothing Then
         Set file = fso.CreateTextFile("C:\temp\resultMsg.txt")
         file.Write resultMsg
         file.Close
-        
+
         ' Разбиваем на строки
         msgLines = Split(resultMsg, vbCrLf)
         If UBound(msgLines) = -1 Then
             msgLines = Split(resultMsg, vbLf)
         End If
+
+        ' Выводим все логи в консоль построчно
+        For i = 0 To UBound(msgLines)
+            WScript.Echo Trim(msgLines(i))
+        Next
 
         ' Выгружаем все строки на вкладку "Данные"
         For i = 0 To UBound(msgLines)
