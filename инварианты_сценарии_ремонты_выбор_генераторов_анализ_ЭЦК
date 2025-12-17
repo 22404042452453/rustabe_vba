@@ -337,6 +337,9 @@ Sub TryExtractResults(scenarioName, modeName)
 
     On Error Resume Next
 
+    ' ИСПРАВЛЕНИЕ: Правильный вызов через Tables
+    Set tblGen = Rastr.Tables("Generator")
+
     For i = 0 To UBound(selectedGenIndices)
         genIdx = selectedGenIndices(i)
         genName = colName.ZS(genIdx)
@@ -349,14 +352,25 @@ Sub TryExtractResults(scenarioName, modeName)
 
         WriteLog "Извлечение данных для " & genName & " (idx=" & genIdx & ")"
 
-        ' Получаем данные Delta
-        Dim plotDelta, plotTime
-        plotDelta = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, 0)
+        ' ПРАВИЛЬНЫЙ способ получения данных графиков
+        ' Метод 1: Через GetSnapshot
+        Dim plotDelta
+        plotDelta = tblGen.GetSnapshot("Delta", genIdx)
 
         If Err.Number <> 0 Then
-            WriteLog "  Ошибка GetChainedGraphSnapshot Delta: " & Err.Description
+            WriteLog "  Ошибка GetSnapshot Delta: " & Err.Description
             Err.Clear
-        ElseIf IsArray(plotDelta) Then
+
+            ' Метод 2: Попробовать альтернативный способ
+            plotDelta = Rastr.GetPlot("Generator", "Delta", genIdx)
+
+            If Err.Number <> 0 Then
+                WriteLog "  Ошибка GetPlot Delta: " & Err.Description
+                Err.Clear
+            End If
+        End If
+
+        If Not IsEmpty(plotDelta) And IsArray(plotDelta) Then
             npoints = UBound(plotDelta, 1) + 1
 
             If npoints > 0 Then
@@ -380,15 +394,19 @@ Sub TryExtractResults(scenarioName, modeName)
             Else
                 WriteLog "  Массив Delta пуст (0 точек)"
             End If
-        Else
-            WriteLog "  Delta не является массивом, тип: " & TypeName(plotDelta)
         End If
 
         ' Получаем данные Omega
         Dim plotOmega
-        plotOmega = Rastr.GetChainedGraphSnapshot("Generator", "Omega", genIdx, 0)
+        plotOmega = tblGen.GetSnapshot("Omega", genIdx)
 
-        If Err.Number = 0 And IsArray(plotOmega) Then
+        If Err.Number <> 0 Then
+            Err.Clear
+            plotOmega = Rastr.GetPlot("Generator", "Omega", genIdx)
+            If Err.Number <> 0 Then Err.Clear
+        End If
+
+        If Not IsEmpty(plotOmega) And IsArray(plotOmega) Then
             npoints = UBound(plotOmega, 1) + 1
             If npoints > 0 Then
                 dataFound = True
@@ -412,12 +430,24 @@ Sub TryExtractResults(scenarioName, modeName)
 
     If Not dataFound Then
         WriteLog "ПРЕДУПРЕЖДЕНИЕ: Данные графиков не найдены ни для одного генератора"
-        wsResult.Cells(resultRow - 1, 6).Value = wsResult.Cells(resultRow - 1, 6).Value & " (данные графиков отсутствуют)"
+        WriteLog "Попытка получить список доступных графиков..."
+
+        ' Диагностика: какие вообще графики доступны?
+        On Error Resume Next
+        Set tblPlots = Rastr.Tables("GraphPage")
+        If Not tblPlots Is Nothing Then
+            WriteLog "Таблица GraphPage содержит записей: " & tblPlots.Count
+            For plotIdx = 0 To tblPlots.Count - 1
+                plotName = tblPlots.Cols("Name").ZS(plotIdx)
+                WriteLog "  График: " & plotName
+            Next
+        End If
+        On Error GoTo 0
+
+        wsResult.Cells(resultRow - 1, 6).Value = wsResult.Cells(resultRow - 1, 6).Value & " (данные графиков отсутствуют - см. лог)"
     Else
         WriteLog "Данные успешно записаны в Excel (колонок: " & (currentCol - 1) & ")"
-        wsResult.Cells(resultRow - 1, 6).Value = wsResult.Cells(resultRow - 1, 6).Value & " (данные записаны в лист 'Данные')"
-
-        ' Автоподбор ширины колонок
+        wsResult.Cells(resultRow - 1, 6).Value = wsResult.Cells(resultRow - 1, 6).Value & " (данные записаны)"
         wsData.Columns.AutoFit
     End If
 
