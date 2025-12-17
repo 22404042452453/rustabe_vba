@@ -13,23 +13,21 @@ ws.Cells(1, 1).Value = "№"
 ws.Cells(1, 2).Value = "Сценарий"
 ws.Cells(1, 3).Value = "Полный текст лога"
 ws.Cells(1, 4).Value = "Линия"
-ws.Cells(1, 5).Value = "Параллельность"
-ws.Cells(1, 6).Value = "Угол"
-ws.Cells(1, 7).Value = "Порог"
-ws.Cells(1, 8).Value = "Цикл АР"
-ws.Cells(1, 9).Value = "Время (t)"
-ws.Range("A1:I1").Font.Bold = True
+ws.Cells(1, 5).Value = "Угол"
+ws.Cells(1, 6).Value = "Порог"
+ws.Cells(1, 7).Value = "Цикл АР"
+ws.Cells(1, 8).Value = "Время (t)"
+ws.Range("A1:H1").Font.Bold = True
 
 ' Счетчик строк результатов
 rowNum = 2
 foundTotal = 0
 
-' Запускаем обычный расчет динамики (не EMS)
+' Запускаем расчет динамики
 Set spFWDynamic = Rastr.FWDynamic
 
 If Not spFWDynamic Is Nothing Then
-    ' Обычный расчет динамики
-    nRes = spFWDynamic.Run()
+    nRes = spFWDynamic.RunEMSMode
     
     If nRes = 0 Then
         ' Получаем результирующее сообщение
@@ -45,14 +43,9 @@ If Not spFWDynamic Is Nothing Then
         For i = 0 To UBound(msgLines)
             logLine = Trim(msgLines(i))
             
-            ' Ищем строки с блокировкой АР или просто с превышением угла
-            ' Варианты:
-            ' 1. "Блокировка фиксации АР по изменению угла внутри шага: угол по линии 1110-2020 (0) превысил 180 (цикл АР 1) при t=1,5"
-            ' 2. "Угол по линии 121-333 (0) превысил 180 (цикл АР 1) при t=1.2"
-            If (InStr(1, logLine, "угол по линии", vbTextCompare) > 0 Or _
-                InStr(1, logLine, "Угол по линии", vbTextCompare) > 0) And _
-               InStr(1, logLine, "превысил", vbTextCompare) > 0 And _
-               InStr(1, logLine, "цикл АР", vbTextCompare) > 0 Then
+            ' Ищем строки с блокировкой АР
+            If InStr(1, logLine, "Угол", vbTextCompare) > 0 And _
+               InStr(1, logLine, "превысил", vbTextCompare) > 0 Then
                 
                 foundTotal = foundTotal + 1
                 
@@ -62,21 +55,27 @@ If Not spFWDynamic Is Nothing Then
                 ws.Cells(rowNum, 3).Value = logLine
                 
                 ' Парсим данные из строки
+                ' Пример: "Блокировка фиксации АР по изменению угла внутри шага: угол по линии 1110-2020 (0) превысил 180 (цикл АР 1) при t=1,5"
                 
-                ' Извлекаем линию и параллельность (формат XXXX-YYYY (N))
+                ' Извлекаем линию (формат XXXX-YYYY)
                 Set regexLine = CreateObject("VBScript.RegExp")
-                regexLine.Pattern = "линии\s+(\d+-\d+)\s*\((\d+)\)"
+                regexLine.Pattern = "линии\s+(\d+-\d+)"
                 regexLine.IgnoreCase = True
                 If regexLine.Test(logLine) Then
                     Set matchLine = regexLine.Execute(logLine)
-                    ws.Cells(rowNum, 4).Value = matchLine(0).SubMatches(0)  ' Линия
-                    ws.Cells(rowNum, 5).Value = CInt(matchLine(0).SubMatches(1))  ' Параллельность
+                    ws.Cells(rowNum, 4).Value = matchLine(0).SubMatches(0)
                 End If
                 
-                ' Извлекаем угол после параллельности и перед "превысил"
-                ' Может быть в формате: "(N) превысил" где N - это порог, но нам нужен угол ДО превысил
-                ' На самом деле в примере угол не указан явно, только порог
-                ' Попробуем найти число перед "превысил" в контексте
+                ' Извлекаем угол в скобках перед "превысил" (текущее значение)
+                Set regexCurrentAngle = CreateObject("VBScript.RegExp")
+                regexCurrentAngle.Pattern = "\((-?\d+[,.]?\d*)\)\s*превысил"
+                regexCurrentAngle.IgnoreCase = True
+                If regexCurrentAngle.Test(logLine) Then
+                    Set matchCurrentAngle = regexCurrentAngle.Execute(logLine)
+                    angleStr = matchCurrentAngle(0).SubMatches(0)
+                    angleStr = Replace(angleStr, ",", ".")
+                    ws.Cells(rowNum, 5).Value = CDbl(angleStr)
+                End If
                 
                 ' Извлекаем порог (число после "превысил")
                 Set regexThreshold = CreateObject("VBScript.RegExp")
@@ -84,7 +83,7 @@ If Not spFWDynamic Is Nothing Then
                 regexThreshold.IgnoreCase = True
                 If regexThreshold.Test(logLine) Then
                     Set matchThreshold = regexThreshold.Execute(logLine)
-                    ws.Cells(rowNum, 7).Value = CDbl(matchThreshold(0).SubMatches(0))
+                    ws.Cells(rowNum, 6).Value = CDbl(matchThreshold(0).SubMatches(0))
                 End If
                 
                 ' Извлекаем цикл АР
@@ -93,7 +92,7 @@ If Not spFWDynamic Is Nothing Then
                 regexCycle.IgnoreCase = True
                 If regexCycle.Test(logLine) Then
                     Set matchCycle = regexCycle.Execute(logLine)
-                    ws.Cells(rowNum, 8).Value = CInt(matchCycle(0).SubMatches(0))
+                    ws.Cells(rowNum, 7).Value = CInt(matchCycle(0).SubMatches(0))
                 End If
                 
                 ' Извлекаем время (t=X,X или t=X.X)
@@ -104,7 +103,7 @@ If Not spFWDynamic Is Nothing Then
                     Set matchTime = regexTime.Execute(logLine)
                     timeStr = matchTime(0).SubMatches(0)
                     timeStr = Replace(timeStr, ",", ".")
-                    ws.Cells(rowNum, 9).Value = CDbl(timeStr)
+                    ws.Cells(rowNum, 8).Value = CDbl(timeStr)
                 End If
                 
                 rowNum = rowNum + 1
@@ -158,12 +157,11 @@ Set spFWDynamic = Nothing
 'ws.Cells(1, 2).Value = "Сценарий"
 'ws.Cells(1, 3).Value = "Полный текст лога"
 'ws.Cells(1, 4).Value = "Линия"
-'ws.Cells(1, 5).Value = "Параллельность"
-'ws.Cells(1, 6).Value = "Угол"
-'ws.Cells(1, 7).Value = "Порог"
-'ws.Cells(1, 8).Value = "Цикл АР"
-'ws.Cells(1, 9).Value = "Время (t)"
-'ws.Range("A1:I1").Font.Bold = True
+'ws.Cells(1, 5).Value = "Угол"
+'ws.Cells(1, 6).Value = "Порог"
+'ws.Cells(1, 7).Value = "Цикл АР"
+'ws.Cells(1, 8).Value = "Время (t)"
+'ws.Range("A1:H1").Font.Bold = True
 
 'rowNum = 2
 'foundTotal = 0
@@ -183,7 +181,7 @@ Set spFWDynamic = Nothing
 '                Set spFWDynamic = Rastr.FWDynamic
 '                
 '                If Not spFWDynamic Is Nothing Then
-'                    nRes = spFWDynamic.Run()
+'                    nRes = spFWDynamic.RunEMSMode
 '                    
 '                    If nRes = 0 Then
 '                        resultMsg = spFWDynamic.ResultMessage
@@ -193,49 +191,49 @@ Set spFWDynamic = Nothing
 '                        For i = 0 To UBound(msgLines)
 '                            logLine = Trim(msgLines(i))
 '                            
-'                            If (InStr(1, logLine, "угол по линии", vbTextCompare) > 0 Or _
-'                                InStr(1, logLine, "Угол по линии", vbTextCompare) > 0) And _
-'                               InStr(1, logLine, "превысил", vbTextCompare) > 0 And _
-'                               InStr(1, logLine, "цикл АР", vbTextCompare) > 0 Then
+'                            If InStr(1, logLine, "Угол", vbTextCompare) > 0 And _
+'                               InStr(1, logLine, "превысил", vbTextCompare) > 0 Then
 '                                
 '                                foundTotal = foundTotal + 1
 '                                ws.Cells(rowNum, 1).Value = foundTotal
 '                                ws.Cells(rowNum, 2).Value = f.Name
 '                                ws.Cells(rowNum, 3).Value = logLine
 '                                
-'                                ' Линия и параллельность
 '                                Set regexLine = CreateObject("VBScript.RegExp")
-'                                regexLine.Pattern = "линии\s+(\d+-\d+)\s*\((\d+)\)"
+'                                regexLine.Pattern = "линии\s+(\d+-\d+)"
 '                                regexLine.IgnoreCase = True
 '                                If regexLine.Test(logLine) Then
-'                                    Set matchLine = regexLine.Execute(logLine)
-'                                    ws.Cells(rowNum, 4).Value = matchLine(0).SubMatches(0)
-'                                    ws.Cells(rowNum, 5).Value = CInt(matchLine(0).SubMatches(1))
+'                                    ws.Cells(rowNum, 4).Value = regexLine.Execute(logLine)(0).SubMatches(0)
 '                                End If
 '                                
-'                                ' Порог
+'                                Set regexAngle = CreateObject("VBScript.RegExp")
+'                                regexAngle.Pattern = "\((-?\d+[,.]?\d*)\)\s*превысил"
+'                                regexAngle.IgnoreCase = True
+'                                If regexAngle.Test(logLine) Then
+'                                    angleStr = regexAngle.Execute(logLine)(0).SubMatches(0)
+'                                    ws.Cells(rowNum, 5).Value = CDbl(Replace(angleStr, ",", "."))
+'                                End If
+'                                
 '                                Set regexThreshold = CreateObject("VBScript.RegExp")
 '                                regexThreshold.Pattern = "превысил\s+(\d+)"
 '                                regexThreshold.IgnoreCase = True
 '                                If regexThreshold.Test(logLine) Then
-'                                    ws.Cells(rowNum, 7).Value = CDbl(regexThreshold.Execute(logLine)(0).SubMatches(0))
+'                                    ws.Cells(rowNum, 6).Value = CDbl(regexThreshold.Execute(logLine)(0).SubMatches(0))
 '                                End If
 '                                
-'                                ' Цикл АР
 '                                Set regexCycle = CreateObject("VBScript.RegExp")
 '                                regexCycle.Pattern = "цикл АР\s+(\d+)"
 '                                regexCycle.IgnoreCase = True
 '                                If regexCycle.Test(logLine) Then
-'                                    ws.Cells(rowNum, 8).Value = CInt(regexCycle.Execute(logLine)(0).SubMatches(0))
+'                                    ws.Cells(rowNum, 7).Value = CInt(regexCycle.Execute(logLine)(0).SubMatches(0))
 '                                End If
 '                                
-'                                ' Время
 '                                Set regexTime = CreateObject("VBScript.RegExp")
 '                                regexTime.Pattern = "при\s+t\s*=\s*([0-9]+[,.]?[0-9]*)"
 '                                regexTime.IgnoreCase = True
 '                                If regexTime.Test(logLine) Then
 '                                    timeStr = regexTime.Execute(logLine)(0).SubMatches(0)
-'                                    ws.Cells(rowNum, 9).Value = CDbl(Replace(timeStr, ",", "."))
+'                                    ws.Cells(rowNum, 8).Value = CDbl(Replace(timeStr, ",", "."))
 '                                End If
 '                                
 '                                rowNum = rowNum + 1
