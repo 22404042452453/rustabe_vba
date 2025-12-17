@@ -11,6 +11,9 @@ MaxRepair_count = 1
 Set spBranch = Rastr.Tables("vetv")
 Set spNode   = Rastr.Tables("node")
 
+' --- ДОБАВИТЬ: Глобальная переменная для динамики ---
+Dim spFWDynamic
+
 ' --- Инициализация Excel ---
 Set xl = CreateObject("Excel.Application")
 xl.Visible = True
@@ -142,11 +145,11 @@ End Function
 ' === ДЕТАЛЬНАЯ ПРОВЕРКА ДИНАМИКИ ===
 Function CheckDynamicsSetup(scenarioName)
     WriteLog "=== Проверка настроек динамики для " & scenarioName & " ==="
-    
+
     ' 1. Проверка объекта FWDynamic
     On Error Resume Next
-    Set spFWDynamic = Rastr.FWDynamic
-    If Err.Number <> 0 Then
+    Set spFWDynamic = Rastr.FWDynamic  ' ВАЖНО: сохраняем в глобальную переменную
+    If Err.Number <> 0 Or spFWDynamic Is Nothing Then
         wsDiag.Cells(diagRow, 1).Value = "Объект FWDynamic"
         wsDiag.Cells(diagRow, 2).Value = scenarioName
         wsDiag.Cells(diagRow, 3).Value = "Доступность"
@@ -158,7 +161,7 @@ Function CheckDynamicsSetup(scenarioName)
         Exit Function
     End If
     On Error GoTo 0
-    
+
     wsDiag.Cells(diagRow, 1).Value = "Объект FWDynamic"
     wsDiag.Cells(diagRow, 2).Value = scenarioName
     wsDiag.Cells(diagRow, 3).Value = "Доступность"
@@ -166,53 +169,32 @@ Function CheckDynamicsSetup(scenarioName)
     wsDiag.Cells(diagRow, 5).Value = "OK"
     diagRow = diagRow + 1
     WriteLog "FWDynamic доступен"
-    
-    ' 2. Проверка параметров
+
+    ' 2. УБРАТЬ ПРОВЕРКУ TimeStep/TimeTotal - они не существуют
+    ' Вместо этого проверяем таблицы параметров динамики
+
     On Error Resume Next
-    
-    ' Пробуем получить текущие параметры
-    timeStep = spFWDynamic.TimeStep
-    If Err.Number = 0 Then
-        wsDiag.Cells(diagRow, 1).Value = "Параметр"
+    Set tblDynPar = Rastr.Tables("com_dynamics")
+    If Err.Number = 0 And Not tblDynPar Is Nothing Then
+        wsDiag.Cells(diagRow, 1).Value = "Таблица"
         wsDiag.Cells(diagRow, 2).Value = scenarioName
-        wsDiag.Cells(diagRow, 3).Value = "TimeStep"
-        wsDiag.Cells(diagRow, 4).Value = timeStep
+        wsDiag.Cells(diagRow, 3).Value = "com_dynamics"
+        wsDiag.Cells(diagRow, 4).Value = "Доступна"
         wsDiag.Cells(diagRow, 5).Value = "OK"
         diagRow = diagRow + 1
-        WriteLog "TimeStep = " & timeStep
+        WriteLog "Таблица com_dynamics доступна"
     Else
-        wsDiag.Cells(diagRow, 1).Value = "Параметр"
+        wsDiag.Cells(diagRow, 1).Value = "Таблица"
         wsDiag.Cells(diagRow, 2).Value = scenarioName
-        wsDiag.Cells(diagRow, 3).Value = "TimeStep"
-        wsDiag.Cells(diagRow, 4).Value = "Недоступен"
-        wsDiag.Cells(diagRow, 5).Value = "Ошибка: " & Err.Description
+        wsDiag.Cells(diagRow, 3).Value = "com_dynamics"
+        wsDiag.Cells(diagRow, 4).Value = "Недоступна"
+        wsDiag.Cells(diagRow, 5).Value = "ПРЕДУПРЕЖДЕНИЕ"
         diagRow = diagRow + 1
-        WriteLog "TimeStep недоступен: " & Err.Description
+        WriteLog "Таблица com_dynamics недоступна"
         Err.Clear
     End If
-    
-    timeTotal = spFWDynamic.TimeTotal
-    If Err.Number = 0 Then
-        wsDiag.Cells(diagRow, 1).Value = "Параметр"
-        wsDiag.Cells(diagRow, 2).Value = scenarioName
-        wsDiag.Cells(diagRow, 3).Value = "TimeTotal"
-        wsDiag.Cells(diagRow, 4).Value = timeTotal
-        wsDiag.Cells(diagRow, 5).Value = "OK"
-        diagRow = diagRow + 1
-        WriteLog "TimeTotal = " & timeTotal
-    Else
-        wsDiag.Cells(diagRow, 1).Value = "Параметр"
-        wsDiag.Cells(diagRow, 2).Value = scenarioName
-        wsDiag.Cells(diagRow, 3).Value = "TimeTotal"
-        wsDiag.Cells(diagRow, 4).Value = "Недоступен"
-        wsDiag.Cells(diagRow, 5).Value = "Ошибка: " & Err.Description
-        diagRow = diagRow + 1
-        WriteLog "TimeTotal недоступен: " & Err.Description
-        Err.Clear
-    End If
-    
     On Error GoTo 0
-    
+
     ' 3. Проверка таблицы генераторов
     Set tblGen = Rastr.Tables("Generator")
     genCount = tblGen.Count
@@ -223,7 +205,7 @@ Function CheckDynamicsSetup(scenarioName)
     wsDiag.Cells(diagRow, 5).Value = IIf(genCount > 0, "OK", "ОШИБКА")
     diagRow = diagRow + 1
     WriteLog "Генераторов: " & genCount
-    
+
     ' 4. Проверка таблицы возмущений
     On Error Resume Next
     Set tblDst = Rastr.Tables("Disturbance")
@@ -246,7 +228,7 @@ Function CheckDynamicsSetup(scenarioName)
         WriteLog "Таблица Disturbance недоступна"
     End If
     On Error GoTo 0
-    
+
     SaveResults()
     CheckDynamicsSetup = True
 End Function
@@ -282,7 +264,18 @@ Sub TryRunDynamics(scenarioName, modeName)
     End If
     RecordResult scenarioName, modeName, "OK", "Запуск...", "", ""
     WriteLog "УР сошёлся успешно"
-    
+
+    ' ДОБАВИТЬ: Проверка что spFWDynamic существует
+    If spFWDynamic Is Nothing Then
+        wsResult.Cells(resultRow - 1, 4).Value = "Ошибка объекта"
+        wsResult.Cells(resultRow - 1, 6).Value = "spFWDynamic = Nothing"
+        WriteLog "КРИТИЧЕСКАЯ ОШИБКА: spFWDynamic = Nothing"
+        SaveResults()
+        Exit Sub
+    End If
+
+    WriteLog "spFWDynamic проверен, тип: " & TypeName(spFWDynamic)
+
     ' Шаг 2: Динамика
     On Error Resume Next
     WriteLog "Вызов spFWDynamic.Run()..."
