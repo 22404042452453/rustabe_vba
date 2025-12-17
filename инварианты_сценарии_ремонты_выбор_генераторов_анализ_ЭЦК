@@ -296,10 +296,23 @@ Sub TryRunDynamics(scenarioName, modeName)
     WriteLog "Run() вернул код: " & dynRes
     
     If dynRes = 0 Then
+        WriteLog "Динамика вернула код 0, сохраняем результаты..."
+
+        ' ДОБАВИТЬ: Сохранение результатов динамики
+        On Error Resume Next
+        spFWDynamic.Save()
+        If Err.Number <> 0 Then
+            WriteLog "Ошибка сохранения динамики: " & Err.Description
+            Err.Clear
+        Else
+            WriteLog "Результаты динамики сохранены"
+        End If
+        On Error GoTo 0
+
         wsResult.Cells(resultRow - 1, 4).Value = "OK"
         wsResult.Cells(resultRow - 1, 6).Value = "Расчёт выполнен успешно"
         WriteLog "Динамика выполнена успешно"
-        
+
         ' Попытка получить результаты
         Call TryExtractResults(scenarioName, modeName)
     Else
@@ -367,6 +380,24 @@ Sub TryExtractResults(scenarioName, modeName)
             If Err.Number <> 0 Then
                 WriteLog "  Ошибка GetPlot Delta: " & Err.Description
                 Err.Clear
+
+                ' Метод 3: Попробовать GetChainedGraphSnapshot (как в оригинальном скрипте)
+                For snapIdx = 1005 To 0 Step -1
+                    On Error Resume Next
+                    tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
+                    If Err.Number = 0 And IsArray(tmpPlot) Then
+                        plotDelta = tmpPlot
+                        WriteLog "  OK: Найден снимок Delta idx=" & snapIdx
+                        Exit For
+                    End If
+                    Err.Clear
+                Next
+                On Error GoTo 0
+
+                If Err.Number <> 0 Then
+                    WriteLog "  Ошибка GetChainedGraphSnapshot Delta: " & Err.Description
+                    Err.Clear
+                End If
             End If
         End If
 
@@ -401,9 +432,27 @@ Sub TryExtractResults(scenarioName, modeName)
         plotOmega = tblGen.GetSnapshot("Omega", genIdx)
 
         If Err.Number <> 0 Then
+            WriteLog "  Ошибка GetSnapshot Omega: " & Err.Description
             Err.Clear
             plotOmega = Rastr.GetPlot("Generator", "Omega", genIdx)
-            If Err.Number <> 0 Then Err.Clear
+
+            If Err.Number <> 0 Then
+                WriteLog "  Ошибка GetPlot Omega: " & Err.Description
+                Err.Clear
+
+                ' Метод 3: Попробовать GetChainedGraphSnapshot для Omega
+                For snapIdx = 1005 To 0 Step -1
+                    On Error Resume Next
+                    tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Omega", genIdx, snapIdx)
+                    If Err.Number = 0 And IsArray(tmpPlot) Then
+                        plotOmega = tmpPlot
+                        WriteLog "  OK: Найден снимок Omega idx=" & snapIdx
+                        Exit For
+                    End If
+                    Err.Clear
+                Next
+                On Error GoTo 0
+            End If
         End If
 
         If Not IsEmpty(plotOmega) And IsArray(plotOmega) Then
