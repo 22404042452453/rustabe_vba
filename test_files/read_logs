@@ -44,8 +44,8 @@ If Not spFWDynamic Is Nothing Then
         For i = 0 To UBound(msgLines)
             logLine = Trim(msgLines(i))
             
-            ' Ищем строки с блокировкой АР
-            If InStr(1, logLine, "Угол", vbTextCompare) > 0 And _
+            ' Ищем строки с блокировкой АР по линиям
+            If InStr(1, logLine, "по линии", vbTextCompare) > 0 And _
                InStr(1, logLine, "превысил", vbTextCompare) > 0 Then
                 
                 foundTotal = foundTotal + 1
@@ -54,51 +54,26 @@ If Not spFWDynamic Is Nothing Then
                 ws.Cells(rowNum, 1).Value = foundTotal
                 ws.Cells(rowNum, 2).Value = "Текущий расчет"
                 ws.Cells(rowNum, 3).Value = logLine
-                
-                                ' Определяем тип сообщения
-                                Dim msgType
-                                If InStr(1, logLine, "по линии", vbTextCompare) > 0 Then
-                                    msgType = "Линия"
-                                ElseIf InStr(1, logLine, "генератора", vbTextCompare) > 0 Then
-                                    msgType = "Генератор"
-                                Else
-                                    msgType = "Неизвестно"
-                                End If
-                ws.Cells(rowNum, 9).Value = msgType
+                ws.Cells(rowNum, 9).Value = "Линия"
 
-                ' Парсим данные в зависимости от типа
-                If msgType = "Линия" Then
-                    ' Извлекаем линию (формат XXXX-YYYY)
-                    Set regexLine = CreateObject("VBScript.RegExp")
-                    regexLine.Pattern = "линии\s+(\d+-\d+)"
-                    regexLine.IgnoreCase = True
-                    If regexLine.Test(logLine) Then
-                        Set matchLine = regexLine.Execute(logLine)
-                        ws.Cells(rowNum, 4).Value = matchLine(0).SubMatches(0)
-                    End If
+                ' Извлекаем линию (формат XXXX-YYYY)
+                Set regexLine = CreateObject("VBScript.RegExp")
+                regexLine.Pattern = "линии\s+(\d+-\d+)"
+                regexLine.IgnoreCase = True
+                If regexLine.Test(logLine) Then
+                    Set matchLine = regexLine.Execute(logLine)
+                    ws.Cells(rowNum, 4).Value = matchLine(0).SubMatches(0)
+                End If
 
-                    ' Извлекаем угол в скобках перед "превысил" (текущее значение)
-                    Set regexCurrentAngle = CreateObject("VBScript.RegExp")
-                    regexCurrentAngle.Pattern = "\((-?\d+[,.]?\d*)\)\s*превысил"
-                    regexCurrentAngle.IgnoreCase = True
-                    If regexCurrentAngle.Test(logLine) Then
-                        Set matchCurrentAngle = regexCurrentAngle.Execute(logLine)
-                        angleStr = matchCurrentAngle(0).SubMatches(0)
-                        angleStr = Replace(angleStr, ",", ".")
-                        ws.Cells(rowNum, 5).Value = CDbl(angleStr)
-                    End If
-                ElseIf msgType = "Генератор" Then
-                    ' Извлекаем имя генератора
-                    Set regexGenerator = CreateObject("VBScript.RegExp")
-                    regexGenerator.Pattern = "генератора\s+([^ ]+)"
-                    regexGenerator.IgnoreCase = True
-                    If regexGenerator.Test(logLine) Then
-                        Set matchGenerator = regexGenerator.Execute(logLine)
-                        ws.Cells(rowNum, 4).Value = matchGenerator(0).SubMatches(0)
-                    End If
-
-                    ' Угол для генераторов не указывается в скобках, оставляем пустым
-                    ws.Cells(rowNum, 5).Value = ""
+                ' Извлекаем угол в скобках перед "превысил" (текущее значение)
+                Set regexCurrentAngle = CreateObject("VBScript.RegExp")
+                regexCurrentAngle.Pattern = "\((-?\d+[,.]?\d*)\)\s*превысил"
+                regexCurrentAngle.IgnoreCase = True
+                If regexCurrentAngle.Test(logLine) Then
+                    Set matchCurrentAngle = regexCurrentAngle.Execute(logLine)
+                    angleStr = matchCurrentAngle(0).SubMatches(0)
+                    angleStr = Replace(angleStr, ",", ".")
+                    ws.Cells(rowNum, 5).Value = CDbl(angleStr)
                 End If
 
                 ' Извлекаем порог (число после "превысил")
@@ -216,54 +191,30 @@ Set spFWDynamic = Nothing
 '                        For i = 0 To UBound(msgLines)
 '                            logLine = Trim(msgLines(i))
 '                            
-'                            If InStr(1, logLine, "Угол", vbTextCompare) > 0 And _
+'                            If InStr(1, logLine, "по линии", vbTextCompare) > 0 And _
 '                               InStr(1, logLine, "превысил", vbTextCompare) > 0 Then
 '                                
 '                                foundTotal = foundTotal + 1
 '                                ws.Cells(rowNum, 1).Value = foundTotal
 '                                ws.Cells(rowNum, 2).Value = f.Name
 '                                ws.Cells(rowNum, 3).Value = logLine
-'                                
-'                                ' Определяем тип сообщения
-'                                Dim msgType
-'                                If InStr(1, logLine, "по линии", vbTextCompare) > 0 Then
-'                                    msgType = "Линия"
-'                                ElseIf InStr(1, logLine, "генератора", vbTextCompare) > 0 Then
-'                                    msgType = "Генератор"
-'                                Else
-'                                    msgType = "Неизвестно"
+'                                ws.Cells(rowNum, 9).Value = "Линия"
+
+'                                ' Извлекаем линию (формат XXXX-YYYY)
+'                                Set regexLine = CreateObject("VBScript.RegExp")
+'                                regexLine.Pattern = "линии\s+(\d+-\d+)"
+'                                regexLine.IgnoreCase = True
+'                                If regexLine.Test(logLine) Then
+'                                    ws.Cells(rowNum, 4).Value = regexLine.Execute(logLine)(0).SubMatches(0)
 '                                End If
-'                                ws.Cells(rowNum, 9).Value = msgType
-'
-'                                ' Парсим данные в зависимости от типа
-'                                If msgType = "Линия" Then
-'                                    ' Извлекаем линию (формат XXXX-YYYY)
-'                                    Set regexLine = CreateObject("VBScript.RegExp")
-'                                    regexLine.Pattern = "линии\s+(\d+-\d+)"
-'                                    regexLine.IgnoreCase = True
-'                                    If regexLine.Test(logLine) Then
-'                                        ws.Cells(rowNum, 4).Value = regexLine.Execute(logLine)(0).SubMatches(0)
-'                                    End If
-'
-'                                    ' Извлекаем угол в скобках перед "превысил" (текущее значение)
-'                                    Set regexCurrentAngle = CreateObject("VBScript.RegExp")
-'                                    regexCurrentAngle.Pattern = "\((-?\d+[,.]?\d*)\)\s*превысил"
-'                                    regexCurrentAngle.IgnoreCase = True
-'                                    If regexCurrentAngle.Test(logLine) Then
-'                                        angleStr = regexCurrentAngle.Execute(logLine)(0).SubMatches(0)
-'                                        ws.Cells(rowNum, 5).Value = CDbl(Replace(angleStr, ",", "."))
-'                                    End If
-'                                ElseIf msgType = "Генератор" Then
-'                                    ' Извлекаем имя генератора
-'                                    Set regexGenerator = CreateObject("VBScript.RegExp")
-'                                    regexGenerator.Pattern = "генератора\s+([^ ]+)"
-'                                    regexGenerator.IgnoreCase = True
-'                                    If regexGenerator.Test(logLine) Then
-'                                        ws.Cells(rowNum, 4).Value = regexGenerator.Execute(logLine)(0).SubMatches(0)
-'                                    End If
-'
-'                                    ' Угол для генераторов не указывается в скобках, оставляем пустым
-'                                    ws.Cells(rowNum, 5).Value = ""
+
+'                                ' Извлекаем угол в скобках перед "превысил" (текущее значение)
+'                                Set regexCurrentAngle = CreateObject("VBScript.RegExp")
+'                                regexCurrentAngle.Pattern = "\((-?\d+[,.]?\d*)\)\s*превысил"
+'                                regexCurrentAngle.IgnoreCase = True
+'                                If regexCurrentAngle.Test(logLine) Then
+'                                    angleStr = regexCurrentAngle.Execute(logLine)(0).SubMatches(0)
+'                                    ws.Cells(rowNum, 5).Value = CDbl(Replace(angleStr, ",", "."))
 '                                End If
 '
 '                                Set regexThreshold = CreateObject("VBScript.RegExp")
