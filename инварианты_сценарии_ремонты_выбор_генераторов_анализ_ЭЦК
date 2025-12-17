@@ -4,7 +4,7 @@
 ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
-MaxRepair = 4
+MaxRepair = 2
 MaxRepair_count = 1
 
 ' --- Rastr таблицы ---
