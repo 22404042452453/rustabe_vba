@@ -330,95 +330,8 @@ Sub TryRunDynamics(scenarioName, modeName)
         WriteLog "Динамика выполнена успешно, извлекаем данные..."
         wsResult.Cells(resultRow - 1, 4).Value = "OK"
 
-        ' ИЗВЛЕЧЕНИЕ РЕЗУЛЬТАТОВ СРАЗУ ПОСЛЕ Run()
         On Error Resume Next
-        dataFound = False
-        currentCol = 2  ' Начинаем со второй колонки (первая - время)
-
-        ' Заголовки в wsData
-        wsData.Cells(1, 1).Value = "Время"
-
-        For Each genIdx In selectedGenIndices
-            genName = colName.ZS(genIdx)
-
-            ' Пытаемся взять последний снимок (MaxSnapshotIndex=1005 до 0)
-            Dim Plot
-            Set Plot = Nothing
-            For snapIdx = 1005 To 0 Step -1
-                On Error Resume Next
-                tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
-                errNum = Err.Number
-                On Error GoTo 0
-                If errNum = 0 And IsArray(tmpPlot) Then
-                    Plot = tmpPlot
-                    Exit For
-                End If
-            Next
-
-            If IsArray(Plot) Then
-                npoints = UBound(Plot, 1) + 1
-                If npoints > 0 Then
-                    dataFound = True
-                    WriteLog "  OK: Получено " & npoints & " точек Delta для " & genName
-
-                    ' Записываем заголовок
-                    wsData.Cells(1, currentCol).Value = genName & " Delta"
-
-                    ' Записываем данные
-                    For row = 0 To npoints - 1
-                        ' Время (если еще не записано)
-                        If currentCol = 2 Then
-                            wsData.Cells(row + 2, 1).Value = Plot(row, 0)
-                        End If
-                        ' Значение Delta
-                        wsData.Cells(row + 2, currentCol).Value = Plot(row, 1)
-                    Next
-
-                    currentCol = currentCol + 1
-                End If
-            End If
-
-            ' Аналогично для Omega
-            Dim PlotOmega
-            Set PlotOmega = Nothing
-            For snapIdx = 1005 To 0 Step -1
-                On Error Resume Next
-                tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Omega", genIdx, snapIdx)
-                errNum = Err.Number
-                On Error GoTo 0
-                If errNum = 0 And IsArray(tmpPlot) Then
-                    PlotOmega = tmpPlot
-                    Exit For
-                End If
-            Next
-
-            If IsArray(PlotOmega) Then
-                npoints = UBound(PlotOmega, 1) + 1
-                If npoints > 0 Then
-                    dataFound = True
-                    WriteLog "  OK: Получено " & npoints & " точек Omega для " & genName
-
-                    ' Записываем заголовок
-                    wsData.Cells(1, currentCol).Value = genName & " Omega"
-
-                    ' Записываем данные
-                    For row = 0 To npoints - 1
-                        wsData.Cells(row + 2, currentCol).Value = PlotOmega(row, 1)
-                    Next
-
-                    currentCol = currentCol + 1
-                End If
-            End If
-        Next
-
-        If Not dataFound Then
-            WriteLog "ПРЕДУПРЕЖДЕНИЕ: Данные графиков не найдены ни для одного генератора"
-            wsResult.Cells(resultRow - 1, 6).Value = "Расчёт выполнен успешно (данные графиков отсутствуют)"
-        Else
-            WriteLog "Данные успешно записаны в Excel (колонок: " & (currentCol - 1) & ")"
-            wsResult.Cells(resultRow - 1, 6).Value = "Расчёт выполнен успешно (данные записаны)"
-            wsData.Columns.AutoFit
-        End If
+        RunDynamicsAndWrite wsResult, "УР: Нормальная схема"
         On Error GoTo 0
     Else
         wsResult.Cells(resultRow - 1, 4).Value = "Ошибка"
@@ -443,7 +356,85 @@ Sub TryRunDynamics(scenarioName, modeName)
     SaveResults()
 End Sub
 
+Sub RunDynamicsAndWrite(genSheet, description)
+    genSheet.Cells(resultRow, 1).Value = description
+    genSheet.Cells(resultRow, 1).Font.Bold = True
+    resultRow = resultRow + 1
 
+    genSheet.Cells(resultRow, 1).Value = "Генератор"
+    genSheet.Cells(resultRow, 2).Value = "Max Delta"
+    genSheet.Cells(resultRow, 3).Value = "Min Delta"
+    genSheet.Cells(resultRow, 4).Value = "Время Max Delta"
+    genSheet.Cells(resultRow, 5).Value = "Нарушение устойчивости"
+    genSheet.Cells(resultRow, 6).Value = "Время нарушения устойчивости"
+    genSheet.Range(genSheet.Cells(resultRow, 1), genSheet.Cells(resultRow, 6)).Font.Bold = True
+    resultRow = resultRow + 1
+
+    Dim scenarioBlockStart: scenarioBlockStart = resultRow
+    Dim dataCol: dataCol = 1
+
+    For Each genIdx In selectedGenIndices
+        genName = colName.ZS(genIdx)
+
+        Dim Plot
+        Set Plot = Nothing
+        For snapIdx = 1005 To 0 Step -1
+            On Error Resume Next
+            tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
+            errNum = Err.Number
+            On Error GoTo 0
+            If errNum = 0 And IsArray(tmpPlot) Then
+                Plot = tmpPlot
+                Exit For
+            End If
+        Next
+
+        If IsArray(Plot) Then
+            npoints = UBound(Plot, 1) + 1
+            If npoints > 0 Then
+                deltaCol = dataCol
+                timeCol = dataCol + 1
+                checkCol = dataCol + 2
+
+                wsData.Cells(1, deltaCol).Value = genName & " (Delta)"
+                wsData.Cells(1, timeCol).Value = genName & " (Time)"
+                wsData.Cells(1, checkCol).Value = genName & " (>360)"
+
+                wsData.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
+                wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & deltaCol & ">360,ROW(),999999)"
+
+                deltaStartAddr = wsData.Cells(2, deltaCol).Address(False, False, 1, True)
+                deltaEndAddr = wsData.Cells(npoints + 1, deltaCol).Address(False, False, 1, True)
+                deltaRange = deltaStartAddr & ":" & deltaEndAddr
+
+                timeStartAddr = wsData.Cells(2, timeCol).Address(False, False, 1, True)
+                timeEndAddr = wsData.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
+                timeRange = timeStartAddr & ":" & timeEndAddr
+
+                checkStartAddr = wsData.Cells(2, checkCol).Address(False, False, 1, True)
+                checkEndAddr = wsData.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
+                checkRange = checkStartAddr & ":" & checkEndAddr
+
+                genSheet.Cells(resultRow, 1).Value = genName
+                genSheet.Cells(resultRow, 2).Formula = "=MAX(" & deltaRange & ")"
+                genSheet.Cells(resultRow, 3).Formula = "=MIN(" & deltaRange & ")"
+                genSheet.Cells(resultRow, 4).Formula = "=INDEX(" & timeRange & ",MATCH(MAX(" & deltaRange & ")," & deltaRange & ",0))"
+                genSheet.Cells(resultRow, 5).Formula = "=IF(MAX(" & deltaRange & ")>360,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
+                genSheet.Cells(resultRow, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>360,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+
+                resultRow = resultRow + 1
+                dataCol = dataCol + 3
+            End If
+        End If
+    Next
+
+    Dim scenarioBlockEnd: scenarioBlockEnd = resultRow - 1
+    If scenarioBlockEnd >= scenarioBlockStart Then
+        xl.Calculate
+        genSheet.Range(genSheet.Cells(scenarioBlockStart, 1), genSheet.Cells(scenarioBlockEnd, 6)).Value = _
+            genSheet.Range(genSheet.Cells(scenarioBlockStart, 1), genSheet.Cells(scenarioBlockEnd, 6)).Value
+    End If
+End Sub
 
 ' === ОСНОВНОЙ КОД ===
 Set fso = CreateObject("Scripting.FileSystemObject")
