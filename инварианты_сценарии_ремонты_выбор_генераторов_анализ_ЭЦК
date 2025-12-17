@@ -98,12 +98,21 @@ End Sub
 
 WriteLog "Скрипт запущен"
 
+' Проверка наличия обязательных колонок
+On Error Resume Next
+Set spBranchSel = spBranch.Cols("Report")
+If Err.Number <> 0 Then
+    MsgBox "Ошибка: В таблице ветвей (vetv) не найдена колонка 'Report'." & vbCrLf & _
+           "Добавьте колонку 'Report' типа BOOL в шаблон модели и перезапустите скрипт.", vbCritical, "Ошибка настройки модели"
+    WScript.Quit
+End If
+On Error GoTo 0
+
 Set spBranchIp  = spBranch.Cols("ip")
 Set spBranchIq  = spBranch.Cols("iq")
 Set spBranchNm  = spBranch.Cols("name")
 Set spBranchSta = spBranch.Cols("sta")
 Set spBranchGrp = spBranch.Cols("groupid")
-Set spBranchSel = spBranch.Cols("Report")
 Set spNodeSta   = spNode.Cols("sta")
 Set spNodeName  = spNode.Cols("name")
 
