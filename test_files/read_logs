@@ -27,7 +27,7 @@ foundTotal = 0
 Set spFWDynamic = Rastr.FWDynamic
 
 If Not spFWDynamic Is Nothing Then
-    nRes = spFWDynamic.RunEMSMode
+    nRes = spFWDynamic.Run()
     
     If nRes = 0 Then
         ' Получаем результирующее сообщение
@@ -103,7 +103,7 @@ If Not spFWDynamic Is Nothing Then
                     Set matchTime = regexTime.Execute(logLine)
                     timeStr = matchTime(0).SubMatches(0)
                     timeStr = Replace(timeStr, ",", ".")
-                    ws.Cells(rowNum, 8).Value = CDbl(timeStr)
+                    ws.Cells(rowNum, 8).Value = timeStr
                 End If
                 
                 rowNum = rowNum + 1
@@ -181,7 +181,7 @@ Set spFWDynamic = Nothing
 '                Set spFWDynamic = Rastr.FWDynamic
 '                
 '                If Not spFWDynamic Is Nothing Then
-'                    nRes = spFWDynamic.RunEMSMode
+'                    nRes = spFWDynamic.Run()
 '                    
 '                    If nRes = 0 Then
 '                        resultMsg = spFWDynamic.ResultMessage
