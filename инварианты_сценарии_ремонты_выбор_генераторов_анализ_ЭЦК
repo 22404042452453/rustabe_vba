@@ -328,8 +328,10 @@ Sub TryRunDynamics(scenarioName, modeName)
     
     If dynRes = 0 Then
         WriteLog "Динамика выполнена успешно, извлекаем данные..."
+        wsResult.Cells(resultRow - 1, 4).Value = "OK"
 
         ' ИЗВЛЕЧЕНИЕ РЕЗУЛЬТАТОВ СРАЗУ ПОСЛЕ Run()
+        On Error Resume Next
         dataFound = False
         currentCol = 2  ' Начинаем со второй колонки (первая - время)
 
@@ -417,8 +419,7 @@ Sub TryRunDynamics(scenarioName, modeName)
             wsResult.Cells(resultRow - 1, 6).Value = "Расчёт выполнен успешно (данные записаны)"
             wsData.Columns.AutoFit
         End If
-
-        wsResult.Cells(resultRow - 1, 4).Value = "OK"
+        On Error GoTo 0
     Else
         wsResult.Cells(resultRow - 1, 4).Value = "Ошибка"
         wsResult.Cells(resultRow - 1, 5).Value = dynRes
