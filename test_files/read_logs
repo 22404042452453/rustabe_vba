@@ -38,6 +38,9 @@ If Not spFWDynamic Is Nothing Then
         ' Получаем результирующее сообщение
         resultMsg = spFWDynamic.ResultMessage
 
+        ' Выводим все логи в консоль
+        WScript.Echo resultMsg
+
         ' Сохраняем resultMsg в файл для анализа
         Dim fso
         Set fso = CreateObject("Scripting.FileSystemObject")
