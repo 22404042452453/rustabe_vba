@@ -4,7 +4,7 @@
 ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
-MaxRepair = 2
+MaxRepair = 4
 MaxRepair_count = 1
 
 ' --- Rastr таблицы ---
@@ -67,6 +67,7 @@ Dim resultRow: resultRow = 2
 Dim diagRow: diagRow = 2
 Dim logRow: logRow = 2
 Dim alarRow: alarRow = 2
+Dim TemplateFieldsAdded: TemplateFieldsAdded = 0
 
 ' === ФУНКЦИЯ ЛОГИРОВАНИЯ ===
 Sub WriteLog(msg)
@@ -101,6 +102,11 @@ WriteLog "Скрипт запущен"
 ' --- Подготовка шаблона ---
 PrepareTemplate
 
+If TemplateFieldsAdded = 1 Then
+    MsgBox "Поля добавлены. Сохраните модель и запустите скрипт повторно для расчётов.", vbInformation, "Подготовка завершена"
+    WScript.Quit
+End If
+
 ' Проверка наличия обязательных колонок
 On Error Resume Next
 Set spBranchSel = spBranch.Cols("Report")
@@ -118,15 +124,10 @@ Sub PrepareTemplate
         spBranch.Cols("Repair").Prop(FL_ZAG) = "Ремонт"
         TemplateFieldsAdded = 1
     End If
-    if spBranch.Cols.Find("Report") < 0 Then
-        spBranch.Cols.Add "Report", PR_BOOL
-        spBranch.Cols("Report").Prop(FL_ZAG) = "Отчет"
-        TemplateFieldsAdded = 1
-    End If
     if spBranch.Cols.Find("_SortKey") < 0 Then
         spBranch.Cols.Add "_SortKey", PR_INT
     End if
-    if TemplateFieldsAdded = 1 Then MsgBox "Добавлены поля Repair/Report. Сохраните модель, если нужно.",1,"Подготовка шаблона"
+    if TemplateFieldsAdded = 1 Then MsgBox "Добавлены поля Ремонт. Сохраните модель, если нужно.",1,"Подготовка шаблона"
 End Sub
 
 Set spBranchIp  = spBranch.Cols("ip")
