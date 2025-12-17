@@ -4,7 +4,7 @@
 ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
-MaxRepair = 2
+MaxRepair = 4
 MaxRepair_count = 1
 
 ' --- Rastr таблицы ---
@@ -328,34 +328,99 @@ End Sub
 ' === ИЗВЛЕЧЕНИЕ РЕЗУЛЬТАТОВ ===
 Sub TryExtractResults(scenarioName, modeName)
     WriteLog "Попытка извлечения результатов..."
-    
+
     dataFound = False
-    
-    For Each genIdx In selectedGenIndices
-        On Error Resume Next
+    currentCol = 2  ' Начинаем со второй колонки (первая - время)
+
+    ' Заголовки в wsData
+    wsData.Cells(1, 1).Value = "Время"
+
+    On Error Resume Next
+
+    For i = 0 To UBound(selectedGenIndices)
+        genIdx = selectedGenIndices(i)
         genName = colName.ZS(genIdx)
-        
-        ' Пробуем получить данные
-        For snapIdx = 1005 To 0 Step -1
-            tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
-            If Err.Number = 0 And IsArray(tmpPlot) Then
-                npoints = UBound(tmpPlot, 1) + 1
-                If npoints > 0 Then
-                    dataFound = True
-                    WriteLog "Получены данные для " & genName & ": " & npoints & " точек"
-                    Exit For
-                End If
-            End If
+
+        If Err.Number <> 0 Then
+            WriteLog "Ошибка получения имени генератора idx=" & genIdx & ": " & Err.Description
             Err.Clear
-        Next
-        On Error GoTo 0
+            genName = "Генератор_" & genIdx
+        End If
+
+        WriteLog "Извлечение данных для " & genName & " (idx=" & genIdx & ")"
+
+        ' Получаем данные Delta
+        Dim plotDelta, plotTime
+        plotDelta = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, 0)
+
+        If Err.Number <> 0 Then
+            WriteLog "  Ошибка GetChainedGraphSnapshot Delta: " & Err.Description
+            Err.Clear
+        ElseIf IsArray(plotDelta) Then
+            npoints = UBound(plotDelta, 1) + 1
+
+            If npoints > 0 Then
+                dataFound = True
+                WriteLog "  OK: Получено " & npoints & " точек Delta"
+
+                ' Записываем заголовок
+                wsData.Cells(1, currentCol).Value = genName & " Delta"
+
+                ' Записываем данные
+                For row = 0 To npoints - 1
+                    ' Время (если еще не записано)
+                    If currentCol = 2 Then
+                        wsData.Cells(row + 2, 1).Value = plotDelta(row, 0)
+                    End If
+                    ' Значение Delta
+                    wsData.Cells(row + 2, currentCol).Value = plotDelta(row, 1)
+                Next
+
+                currentCol = currentCol + 1
+            Else
+                WriteLog "  Массив Delta пуст (0 точек)"
+            End If
+        Else
+            WriteLog "  Delta не является массивом, тип: " & TypeName(plotDelta)
+        End If
+
+        ' Получаем данные Omega
+        Dim plotOmega
+        plotOmega = Rastr.GetChainedGraphSnapshot("Generator", "Omega", genIdx, 0)
+
+        If Err.Number = 0 And IsArray(plotOmega) Then
+            npoints = UBound(plotOmega, 1) + 1
+            If npoints > 0 Then
+                dataFound = True
+                WriteLog "  OK: Получено " & npoints & " точек Omega"
+
+                ' Записываем заголовок
+                wsData.Cells(1, currentCol).Value = genName & " Omega"
+
+                ' Записываем данные
+                For row = 0 To npoints - 1
+                    wsData.Cells(row + 2, currentCol).Value = plotOmega(row, 1)
+                Next
+
+                currentCol = currentCol + 1
+            End If
+        End If
+        Err.Clear
     Next
-    
+
+    On Error GoTo 0
+
     If Not dataFound Then
-        WriteLog "ПРЕДУПРЕЖДЕНИЕ: Данные графиков не найдены"
-        wsResult.Cells(resultRow - 1, 6).Value = wsResult.Cells(resultRow - 1, 6).Value & " (данные не найдены)"
+        WriteLog "ПРЕДУПРЕЖДЕНИЕ: Данные графиков не найдены ни для одного генератора"
+        wsResult.Cells(resultRow - 1, 6).Value = wsResult.Cells(resultRow - 1, 6).Value & " (данные графиков отсутствуют)"
+    Else
+        WriteLog "Данные успешно записаны в Excel (колонок: " & (currentCol - 1) & ")"
+        wsResult.Cells(resultRow - 1, 6).Value = wsResult.Cells(resultRow - 1, 6).Value & " (данные записаны в лист 'Данные')"
+
+        ' Автоподбор ширины колонок
+        wsData.Columns.AutoFit
     End If
-    
+
     SaveResults()
 End Sub
 
