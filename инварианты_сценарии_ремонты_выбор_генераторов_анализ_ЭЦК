@@ -4,7 +4,7 @@
 ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
 
-MaxRepair = 4
+MaxRepair = 2
 MaxRepair_count = 1
 
 ' --- Rastr таблицы ---
@@ -296,12 +296,98 @@ Sub TryRunDynamics(scenarioName, modeName)
     WriteLog "Run() вернул код: " & dynRes
     
     If dynRes = 0 Then
-        wsResult.Cells(resultRow - 1, 4).Value = "OK"
-        wsResult.Cells(resultRow - 1, 6).Value = "Расчёт выполнен успешно"
-        WriteLog "Динамика выполнена успешно"
+        WriteLog "Динамика выполнена успешно, извлекаем данные..."
 
-        ' Попытка получить результаты
-        Call TryExtractResults(scenarioName, modeName)
+        ' ИЗВЛЕЧЕНИЕ РЕЗУЛЬТАТОВ СРАЗУ ПОСЛЕ Run()
+        dataFound = False
+        currentCol = 2  ' Начинаем со второй колонки (первая - время)
+
+        ' Заголовки в wsData
+        wsData.Cells(1, 1).Value = "Время"
+
+        For Each genIdx In selectedGenIndices
+            genName = colName.ZS(genIdx)
+
+            ' Пытаемся взять последний снимок (MaxSnapshotIndex=1005 до 0)
+            Dim Plot
+            Set Plot = Nothing
+            For snapIdx = 1005 To 0 Step -1
+                On Error Resume Next
+                tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
+                errNum = Err.Number
+                On Error GoTo 0
+                If errNum = 0 And IsArray(tmpPlot) Then
+                    Plot = tmpPlot
+                    Exit For
+                End If
+            Next
+
+            If IsArray(Plot) Then
+                npoints = UBound(Plot, 1) + 1
+                If npoints > 0 Then
+                    dataFound = True
+                    WriteLog "  OK: Получено " & npoints & " точек Delta для " & genName
+
+                    ' Записываем заголовок
+                    wsData.Cells(1, currentCol).Value = genName & " Delta"
+
+                    ' Записываем данные
+                    For row = 0 To npoints - 1
+                        ' Время (если еще не записано)
+                        If currentCol = 2 Then
+                            wsData.Cells(row + 2, 1).Value = Plot(row, 0)
+                        End If
+                        ' Значение Delta
+                        wsData.Cells(row + 2, currentCol).Value = Plot(row, 1)
+                    Next
+
+                    currentCol = currentCol + 1
+                End If
+            End If
+
+            ' Аналогично для Omega
+            Dim PlotOmega
+            Set PlotOmega = Nothing
+            For snapIdx = 1005 To 0 Step -1
+                On Error Resume Next
+                tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Omega", genIdx, snapIdx)
+                errNum = Err.Number
+                On Error GoTo 0
+                If errNum = 0 And IsArray(tmpPlot) Then
+                    PlotOmega = tmpPlot
+                    Exit For
+                End If
+            Next
+
+            If IsArray(PlotOmega) Then
+                npoints = UBound(PlotOmega, 1) + 1
+                If npoints > 0 Then
+                    dataFound = True
+                    WriteLog "  OK: Получено " & npoints & " точек Omega для " & genName
+
+                    ' Записываем заголовок
+                    wsData.Cells(1, currentCol).Value = genName & " Omega"
+
+                    ' Записываем данные
+                    For row = 0 To npoints - 1
+                        wsData.Cells(row + 2, currentCol).Value = PlotOmega(row, 1)
+                    Next
+
+                    currentCol = currentCol + 1
+                End If
+            End If
+        Next
+
+        If Not dataFound Then
+            WriteLog "ПРЕДУПРЕЖДЕНИЕ: Данные графиков не найдены ни для одного генератора"
+            wsResult.Cells(resultRow - 1, 6).Value = "Расчёт выполнен успешно (данные графиков отсутствуют)"
+        Else
+            WriteLog "Данные успешно записаны в Excel (колонок: " & (currentCol - 1) & ")"
+            wsResult.Cells(resultRow - 1, 6).Value = "Расчёт выполнен успешно (данные записаны)"
+            wsData.Columns.AutoFit
+        End If
+
+        wsResult.Cells(resultRow - 1, 4).Value = "OK"
     Else
         wsResult.Cells(resultRow - 1, 4).Value = "Ошибка"
         wsResult.Cells(resultRow - 1, 5).Value = dynRes
@@ -325,100 +411,7 @@ Sub TryRunDynamics(scenarioName, modeName)
     SaveResults()
 End Sub
 
-' === ИЗВЛЕЧЕНИЕ РЕЗУЛЬТАТОВ ===
-Sub TryExtractResults(scenarioName, modeName)
-    WriteLog "Попытка извлечения результатов..."
 
-    dataFound = False
-    currentCol = 2  ' Начинаем со второй колонки (первая - время)
-
-    ' Заголовки в wsData
-    wsData.Cells(1, 1).Value = "Время"
-
-    For Each genIdx In selectedGenIndices
-        genName = colName.ZS(genIdx)
-
-        ' Пытаемся взять последний снимок (MaxSnapshotIndex=1005 до 0)
-        Dim Plot
-        Set Plot = Nothing
-        For snapIdx = 1005 To 0 Step -1
-            On Error Resume Next
-            tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
-            errNum = Err.Number
-            On Error GoTo 0
-            If errNum = 0 And IsArray(tmpPlot) Then
-                Plot = tmpPlot
-                Exit For
-            End If
-        Next
-
-        If IsArray(Plot) Then
-            npoints = UBound(Plot, 1) + 1
-            If npoints > 0 Then
-                dataFound = True
-                WriteLog "  OK: Получено " & npoints & " точек Delta для " & genName
-
-                ' Записываем заголовок
-                wsData.Cells(1, currentCol).Value = genName & " Delta"
-
-                ' Записываем данные
-                For row = 0 To npoints - 1
-                    ' Время (если еще не записано)
-                    If currentCol = 2 Then
-                        wsData.Cells(row + 2, 1).Value = Plot(row, 0)
-                    End If
-                    ' Значение Delta
-                    wsData.Cells(row + 2, currentCol).Value = Plot(row, 1)
-                Next
-
-                currentCol = currentCol + 1
-            End If
-        End If
-
-        ' Аналогично для Omega
-        Dim PlotOmega
-        Set PlotOmega = Nothing
-        For snapIdx = 1005 To 0 Step -1
-            On Error Resume Next
-            tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Omega", genIdx, snapIdx)
-            errNum = Err.Number
-            On Error GoTo 0
-            If errNum = 0 And IsArray(tmpPlot) Then
-                PlotOmega = tmpPlot
-                Exit For
-            End If
-        Next
-
-        If IsArray(PlotOmega) Then
-            npoints = UBound(PlotOmega, 1) + 1
-            If npoints > 0 Then
-                dataFound = True
-                WriteLog "  OK: Получено " & npoints & " точек Omega для " & genName
-
-                ' Записываем заголовок
-                wsData.Cells(1, currentCol).Value = genName & " Omega"
-
-                ' Записываем данные
-                For row = 0 To npoints - 1
-                    wsData.Cells(row + 2, currentCol).Value = PlotOmega(row, 1)
-                Next
-
-                currentCol = currentCol + 1
-            End If
-        End If
-    Next
-
-    If Not dataFound Then
-        WriteLog "ПРЕДУПРЕЖДЕНИЕ: Данные графиков не найдены ни для одного генератора"
-        wsResult.Cells(resultRow - 1, 6).Value = wsResult.Cells(resultRow - 1, 6).Value & " (данные графиков отсутствуют)"
-    Else
-        WriteLog "Данные успешно записаны в Excel (колонок: " & (currentCol - 1) & ")"
-        wsResult.Cells(resultRow - 1, 6).Value = wsResult.Cells(resultRow - 1, 6).Value & " (данные записаны)"
-        wsData.Columns.AutoFit
-    End If
-
-    SaveResults()
-End Sub
 
 ' === ОСНОВНОЙ КОД ===
 Set fso = CreateObject("Scripting.FileSystemObject")
