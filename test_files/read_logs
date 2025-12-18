@@ -1,4 +1,4 @@
-' --- Выгрузка логов ResultMessage в Excel ---
+' --- Выгрузка логов динамики в Excel ---
 
 ' Инициализация Excel для результатов
 Set xl = CreateObject("Excel.Application")
@@ -20,29 +20,34 @@ If Not spFWDynamic Is Nothing Then
     nRes = spFWDynamic.Run()
     
     If nRes = 0 Then
-        ' Получаем результирующее сообщение
-        resultMsg = spFWDynamic.ResultMessage
+        ' Пробуем получить логи разными способами
         
-        ' Разбиваем на строки разными способами
-        msgLines = Split(resultMsg, vbCrLf)
-        If UBound(msgLines) = 0 Then
-            msgLines = Split(resultMsg, vbLf)
+        ' Вариант 1: Через LogMessages (если есть)
+        If Not IsEmpty(spFWDynamic.LogMessages) Then
+            logArray = spFWDynamic.LogMessages
+            For i = 0 To UBound(logArray)
+                ws.Cells(i + 2, 1).Value = i + 1
+                ws.Cells(i + 2, 2).Value = logArray(i)
+            Next
+        ' Вариант 2: Через Log (если есть)
+        ElseIf Not IsEmpty(spFWDynamic.Log) Then
+            logText = spFWDynamic.Log
+            msgLines = Split(logText, vbCrLf)
+            If UBound(msgLines) = 0 Then msgLines = Split(logText, vbLf)
+            For i = 0 To UBound(msgLines)
+                ws.Cells(i + 2, 1).Value = i + 1
+                ws.Cells(i + 2, 2).Value = msgLines(i)
+            Next
+        ' Вариант 3: Только ResultMessage
+        Else
+            ws.Cells(2, 1).Value = 1
+            ws.Cells(2, 2).Value = spFWDynamic.ResultMessage
         End If
-        If UBound(msgLines) = 0 Then
-            msgLines = Split(resultMsg, vbCr)
-        End If
-        
-        ' Выгружаем построчно
-        For i = 0 To UBound(msgLines)
-            ws.Cells(i + 2, 1).Value = i + 1
-            ws.Cells(i + 2, 2).Value = msgLines(i)
-        Next
         
         ' Форматирование
         ws.Columns.AutoFit
         
-        totalLines = UBound(msgLines) + 1
-        MsgBox "Выгружено строк: " & totalLines, vbInformation, "Готово"
+        MsgBox "Логи выгружены", vbInformation, "Готово"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
