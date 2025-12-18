@@ -1,4 +1,4 @@
-' --- Поиск логов блокировки фиксации АР через ResultMessage ---
+' --- Выгрузка логов ResultMessage в Excel ---
 
 ' Инициализация Excel для результатов
 Set xl = CreateObject("Excel.Application")
@@ -6,27 +6,12 @@ xl.Visible = True
 xl.DisplayAlerts = False
 Set wb = xl.Workbooks.Add
 Set ws = wb.Worksheets(1)
-ws.Name = "Блокировки АР"
+ws.Name = "Логи"
 
-' Добавляем вкладку для всех данных
-Set wsData = wb.Worksheets.Add
-wsData.Name = "Данные"
-
-' Заголовки
+' Заголовок
 ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Сценарий"
-ws.Cells(1, 3).Value = "Полный текст лога"
-ws.Cells(1, 4).Value = "Линия"
-ws.Cells(1, 5).Value = "Угол"
-ws.Cells(1, 6).Value = "Порог"
-ws.Cells(1, 7).Value = "Цикл АР"
-ws.Cells(1, 8).Value = "Время (t)"
-ws.Cells(1, 9).Value = "Тип"
-ws.Range("A1:I1").Font.Bold = True
-
-' Счетчик строк результатов
-rowNum = 2
-foundTotal = 0
+ws.Cells(1, 2).Value = "Текст лога"
+ws.Range("A1:B1").Font.Bold = True
 
 ' Запускаем расчет динамики
 Set spFWDynamic = Rastr.FWDynamic
@@ -52,95 +37,23 @@ If Not spFWDynamic Is Nothing Then
             msgLines = Split(resultMsg, vbLf)
         End If
 
-        ' Выводим все логи в консоль построчно
-        For i = 0 To UBound(msgLines)
-            WScript.Echo Trim(msgLines(i))
-        Next
-
-        ' Выгружаем все строки на вкладку "Данные"
-        For i = 0 To UBound(msgLines)
-            wsData.Cells(i+1, 1).Value = Trim(msgLines(i))
-        Next
-        wsData.Columns.AutoFit
-
-        ' Обрабатываем каждую строку
+        ' Выгружаем все строки в Excel
+        rowNum = 2
         For i = 0 To UBound(msgLines)
             logLine = Trim(msgLines(i))
-            
-            ' Ищем строки с блокировкой АР по линиям
-            If InStr(1, logLine, "по линии", vbTextCompare) > 0 And _
-               InStr(1, logLine, "превысил", vbTextCompare) > 0 Then
-                
-                foundTotal = foundTotal + 1
-                
-                ' Записываем основные данные
-                ws.Cells(rowNum, 1).Value = foundTotal
-                ws.Cells(rowNum, 2).Value = "Текущий расчет"
-                ws.Cells(rowNum, 3).Value = logLine
-                ws.Cells(rowNum, 9).Value = "Линия"
-
-                ' Извлекаем линию (формат XXXX-YYYY)
-                Set regexLine = CreateObject("VBScript.RegExp")
-                regexLine.Pattern = "линии\s+(\d+-\d+)"
-                regexLine.IgnoreCase = True
-                If regexLine.Test(logLine) Then
-                    Set matchLine = regexLine.Execute(logLine)
-                    ws.Cells(rowNum, 4).Value = matchLine(0).SubMatches(0)
-                End If
-
-                ' Извлекаем угол в скобках перед "превысил" (текущее значение)
-                Set regexCurrentAngle = CreateObject("VBScript.RegExp")
-                regexCurrentAngle.Pattern = "\((-?\d+[,.]?\d*)\)\s*превысил"
-                regexCurrentAngle.IgnoreCase = True
-                If regexCurrentAngle.Test(logLine) Then
-                    Set matchCurrentAngle = regexCurrentAngle.Execute(logLine)
-                    angleStr = matchCurrentAngle(0).SubMatches(0)
-                    angleStr = Replace(angleStr, ",", ".")
-                    ws.Cells(rowNum, 5).Value = CDbl(angleStr)
-                End If
-
-                ' Извлекаем порог (число после "превысил")
-                Set regexThreshold = CreateObject("VBScript.RegExp")
-                regexThreshold.Pattern = "превысил\s+(\d+)"
-                regexThreshold.IgnoreCase = True
-                If regexThreshold.Test(logLine) Then
-                    Set matchThreshold = regexThreshold.Execute(logLine)
-                    ws.Cells(rowNum, 6).Value = CDbl(matchThreshold(0).SubMatches(0))
-                End If
-
-                ' Извлекаем цикл АР
-                Set regexCycle = CreateObject("VBScript.RegExp")
-                regexCycle.Pattern = "цикл АР\s+(\d+)"
-                regexCycle.IgnoreCase = True
-                If regexCycle.Test(logLine) Then
-                    Set matchCycle = regexCycle.Execute(logLine)
-                    ws.Cells(rowNum, 7).Value = CInt(matchCycle(0).SubMatches(0))
-                End If
-
-                ' Извлекаем время (t=X,X или t=X.X)
-                Set regexTime = CreateObject("VBScript.RegExp")
-                regexTime.Pattern = "при\s+t\s*=\s*([0-9]+[,.]?[0-9]*)"
-                regexTime.IgnoreCase = True
-                If regexTime.Test(logLine) Then
-                    Set matchTime = regexTime.Execute(logLine)
-                    timeStr = matchTime(0).SubMatches(0)
-                    timeStr = Replace(timeStr, ",", ".")
-                    ws.Cells(rowNum, 8).Value = CDbl(timeStr)
-                End If
-                
+            If Len(logLine) > 0 Then ' Пропускаем пустые строки
+                ws.Cells(rowNum, 1).Value = rowNum - 1
+                ws.Cells(rowNum, 2).Value = logLine
                 rowNum = rowNum + 1
             End If
         Next
-        
+
         ' Форматирование
         ws.Columns.AutoFit
         
         ' Итоговое сообщение
-        If foundTotal > 0 Then
-            MsgBox "Найдено записей о блокировке АР: " & foundTotal, vbInformation, "Анализ завершен"
-        Else
-            MsgBox "Записи о блокировке фиксации АР не найдены", vbInformation, "Анализ завершен"
-        End If
+        totalLines = rowNum - 2
+        MsgBox "Выгружено строк логов: " & totalLines, vbInformation, "Выгрузка завершена"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
