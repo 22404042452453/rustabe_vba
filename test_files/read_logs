@@ -1,4 +1,4 @@
-' --- Выгрузка логов динамики в Excel ---
+' --- Поиск всех свойств FWDynamic ---
 
 ' Инициализация Excel для результатов
 Set xl = CreateObject("Excel.Application")
@@ -6,12 +6,12 @@ xl.Visible = True
 xl.DisplayAlerts = False
 Set wb = xl.Workbooks.Add
 Set ws = wb.Worksheets(1)
-ws.Name = "Логи"
+ws.Name = "Свойства"
 
 ' Заголовок
 ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Тип"
-ws.Cells(1, 3).Value = "Текст"
+ws.Cells(1, 2).Value = "Свойство"
+ws.Cells(1, 3).Value = "Значение/Результат"
 ws.Range("A1:C1").Font.Bold = True
 
 ' Запускаем расчет динамики
@@ -22,48 +22,80 @@ If Not spFWDynamic Is Nothing Then
     
     If nRes = 0 Then
         rowNum = 2
-        
-        ' ResultMessage
-        ws.Cells(rowNum, 1).Value = 1
-        ws.Cells(rowNum, 2).Value = "ResultMessage"
-        ws.Cells(rowNum, 3).Value = spFWDynamic.ResultMessage
-        rowNum = rowNum + 1
-        
-        ' AdditionalInformation
         On Error Resume Next
-        additionalInfo = spFWDynamic.AdditionalInformation
         
-        If Not IsEmpty(additionalInfo) And additionalInfo <> "" Then
-            ' Пробуем разбить на строки
-            msgLines = Split(additionalInfo, vbCrLf)
-            If UBound(msgLines) = 0 Then msgLines = Split(additionalInfo, vbLf)
-            If UBound(msgLines) = 0 Then msgLines = Split(additionalInfo, vbCr)
+        ' Список возможных свойств для проверки
+        properties = Array("ResultMessage", "AdditionalInformation", "Messages", _
+                          "Log", "Logs", "EventLog", "Events", "EventList", _
+                          "LogList", "ResultLog", "DetailedLog", "FullLog", _
+                          "CalculationLog", "DynamicLog", "ProtectionLog", _
+                          "ARLog", "BlockingLog", "AngleLog", "GeneratorLog")
+        
+        For i = 0 To UBound(properties)
+            ws.Cells(rowNum, 1).Value = i + 1
+            ws.Cells(rowNum, 2).Value = properties(i)
             
-            ' Выгружаем каждую строку
-            For i = 0 To UBound(msgLines)
-                If Trim(msgLines(i)) <> "" Then
-                    ws.Cells(rowNum, 1).Value = rowNum - 1
-                    ws.Cells(rowNum, 2).Value = "AdditionalInfo"
-                    ws.Cells(rowNum, 3).Value = Trim(msgLines(i))
-                    rowNum = rowNum + 1
-                End If
-            Next
-        Else
-            ' Если не разбилось, выводим целиком
-            ws.Cells(rowNum, 1).Value = 2
-            ws.Cells(rowNum, 2).Value = "AdditionalInfo"
-            ws.Cells(rowNum, 3).Value = additionalInfo
+            ' Пробуем получить значение
+            Select Case properties(i)
+                Case "ResultMessage"
+                    val = spFWDynamic.ResultMessage
+                Case "AdditionalInformation"
+                    val = spFWDynamic.AdditionalInformation
+                Case "Messages"
+                    val = spFWDynamic.Messages
+                Case "Log"
+                    val = spFWDynamic.Log
+                Case "Logs"
+                    val = spFWDynamic.Logs
+                Case "EventLog"
+                    val = spFWDynamic.EventLog
+                Case "Events"
+                    val = spFWDynamic.Events
+                Case "EventList"
+                    val = spFWDynamic.EventList
+                Case "LogList"
+                    val = spFWDynamic.LogList
+                Case "ResultLog"
+                    val = spFWDynamic.ResultLog
+                Case "DetailedLog"
+                    val = spFWDynamic.DetailedLog
+                Case "FullLog"
+                    val = spFWDynamic.FullLog
+                Case "CalculationLog"
+                    val = spFWDynamic.CalculationLog
+                Case "DynamicLog"
+                    val = spFWDynamic.DynamicLog
+                Case "ProtectionLog"
+                    val = spFWDynamic.ProtectionLog
+                Case "ARLog"
+                    val = spFWDynamic.ARLog
+                Case "BlockingLog"
+                    val = spFWDynamic.BlockingLog
+                Case "AngleLog"
+                    val = spFWDynamic.AngleLog
+                Case "GeneratorLog"
+                    val = spFWDynamic.GeneratorLog
+            End Select
+            
+            If IsEmpty(val) Then
+                ws.Cells(rowNum, 3).Value = "(пусто)"
+            ElseIf IsNull(val) Then
+                ws.Cells(rowNum, 3).Value = "(null)"
+            ElseIf val = "" Then
+                ws.Cells(rowNum, 3).Value = "(пустая строка)"
+            Else
+                ws.Cells(rowNum, 3).Value = Left(CStr(val), 500)
+            End If
+            
             rowNum = rowNum + 1
-        End If
+        Next
         
         On Error GoTo 0
         
-        ' Форматирование
         ws.Columns.AutoFit
-        ws.Columns("C:C").ColumnWidth = 150
+        ws.Columns("C:C").ColumnWidth = 100
         
-        totalLines = rowNum - 2
-        MsgBox "Выгружено строк: " & totalLines, vbInformation, "Готово"
+        MsgBox "Проверка свойств завершена", vbInformation, "Готово"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
