@@ -1,4 +1,4 @@
-' --- Поиск файлов с результатами расчета динамики ---
+' --- Сбор логов динамики через события ---
 
 ' Инициализация Excel для результатов
 Set xl = CreateObject("Excel.Application")
@@ -8,104 +8,61 @@ Set wb = xl.Workbooks.Add
 Set ws = wb.Worksheets(1)
 ws.Name = "Логи"
 
-' Заголовок
+' Заголовки
 ws.Cells(1, 1).Value = "№"
 ws.Cells(1, 2).Value = "Источник"
-ws.Cells(1, 3).Value = "Текст лога"
+ws.Cells(1, 3).Value = "Описание"
 ws.Range("A1:C1").Font.Bold = True
 
-' Получаем путь к файлу расчета
-Set fso = CreateObject("Scripting.FileSystemObject")
-currentFile = Rastr.FileName
-If currentFile <> "" Then
-    currentFolder = fso.GetParentFolderName(currentFile)
-    baseName = fso.GetBaseName(currentFile)
-Else
-    MsgBox "Файл расчета не открыт", vbExclamation, "Ошибка"
-    WScript.Quit
-End If
+' Глобальный счетчик строк
+Dim g_rowNum
+g_rowNum = 2
+
+' Подключаемся к объекту Rastr с событиями
+WScript.ConnectObject Rastr, "Rastr_"
 
 ' Запускаем расчет динамики
 Set spFWDynamic = Rastr.FWDynamic
 
 If Not spFWDynamic Is Nothing Then
+    WScript.Echo "Начало расчета..."
+    
     nRes = spFWDynamic.Run()
     
     If nRes = 0 Then
-        rowNum = 2
+        WScript.Echo "Расчет завершен успешно"
         
-        ' Ищем файлы с результатами в папке расчета
-        ' Возможные расширения: .sna, .log, .txt, .out, .res
-        extensions = Array("sna", "log", "txt", "out", "res", "prt", "protocol")
-        
-        For Each ext In extensions
-            ' Полный путь к возможному файлу
-            logFile = currentFolder & "\" & baseName & "." & ext
-            
-            If fso.FileExists(logFile) Then
-                ws.Cells(rowNum, 2).Value = baseName & "." & ext
-                
-                ' Читаем файл
-                Set file = fso.OpenTextFile(logFile, 1)
-                lineNum = 1
-                Do Until file.AtEndOfStream
-                    logLine = file.ReadLine
-                    
-                    ' Ищем строки с блокировкой АР или превышением углов
-                    If InStr(1, logLine, "превысил", vbTextCompare) > 0 Or _
-                       InStr(1, logLine, "блокир", vbTextCompare) > 0 Or _
-                       InStr(1, logLine, "АР", vbTextCompare) > 0 Or _
-                       InStr(1, logLine, "угол", vbTextCompare) > 0 Then
-                        
-                        ws.Cells(rowNum, 1).Value = rowNum - 1
-                        ws.Cells(rowNum, 2).Value = baseName & "." & ext & " (строка " & lineNum & ")"
-                        ws.Cells(rowNum, 3).Value = logLine
-                        rowNum = rowNum + 1
-                    End If
-                    lineNum = lineNum + 1
-                Loop
-                file.Close
-            End If
-        Next
-        
-        ' Также проверяем стандартные пути к логам
-        possiblePaths = Array( _
-            currentFolder & "\dynamic.log", _
-            currentFolder & "\rastr.log", _
-            currentFolder & "\calculation.log", _
-            currentFolder & "\protocol.txt" _
-        )
-        
-        For Each logPath In possiblePaths
-            If fso.FileExists(logPath) Then
-                ws.Cells(rowNum, 2).Value = fso.GetFileName(logPath)
-                
-                Set file = fso.OpenTextFile(logPath, 1)
-                Do Until file.AtEndOfStream
-                    logLine = file.ReadLine
-                    If InStr(1, logLine, "превысил", vbTextCompare) > 0 Or _
-                       InStr(1, logLine, "блокир", vbTextCompare) > 0 Then
-                        
-                        ws.Cells(rowNum, 1).Value = rowNum - 1
-                        ws.Cells(rowNum, 3).Value = logLine
-                        rowNum = rowNum + 1
-                    End If
-                Loop
-                file.Close
-            End If
-        Next
-        
+        ' Форматирование
         ws.Columns.AutoFit
+        ws.Columns("C:C").ColumnWidth = 150
         
-        totalLines = rowNum - 2
-        If totalLines > 0 Then
-            MsgBox "Найдено логов: " & totalLines, vbInformation, "Готово"
-        Else
-            MsgBox "Логи не найдены в файлах." & vbCrLf & "Папка: " & currentFolder, vbInformation, "Результат"
-        End If
+        totalLines = g_rowNum - 2
+        MsgBox "Собрано логов: " & totalLines, vbInformation, "Готово"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
 Else
     MsgBox "FWDynamic недоступен", vbCritical, "Ошибка"
 End If
+
+' Обработчик события OnLog
+Sub Rastr_OnLog(Code, Level, StageId, TableName, TableIndex, Description, FormName)
+    ws.Cells(g_rowNum, 1).Value = g_rowNum - 1
+    ws.Cells(g_rowNum, 2).Value = "OnLog"
+    ws.Cells(g_rowNum, 3).Value = Description
+    g_rowNum = g_rowNum + 1
+    
+    ' Выводим в консоль для отладки
+    WScript.Echo "OnLog: " & Description
+End Sub
+
+' Обработчик события prot
+Sub Rastr_prot(str)
+    ws.Cells(g_rowNum, 1).Value = g_rowNum - 1
+    ws.Cells(g_rowNum, 2).Value = "prot"
+    ws.Cells(g_rowNum, 3).Value = str
+    g_rowNum = g_rowNum + 1
+    
+    ' Выводим в консоль для отладки
+    WScript.Echo "prot: " & str
+End Sub
