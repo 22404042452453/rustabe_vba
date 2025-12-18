@@ -1,6 +1,4 @@
-' --- Сбор логов динамики через события в VBScript ---
-
-Option Explicit
+' --- Сбор логов динамики в RastrWin ---
 
 ' Глобальные переменные
 Dim xl, wb, ws
@@ -22,25 +20,36 @@ ws.Range("A1:C1").Font.Bold = True
 
 rowNum = 2
 
-' Создаем объект Rastr с поддержкой событий
-Dim Rastr
-Set Rastr = WScript.CreateObject("Astra.Rastr", "Rastr_")
-
-' Загрузка файла (если нужно)
-' Rastr.Load 1, "C:\путь\к\файлу.rg2", ""
-
-' Запускаем расчет динамики
+' Запускаем расчет динамики (Rastr уже доступен глобально)
 Dim spFWDynamic
 Set spFWDynamic = Rastr.FWDynamic
 
 If Not spFWDynamic Is Nothing Then
-    WScript.Echo "Начало расчета..."
-    
     Dim nRes
     nRes = spFWDynamic.Run()
     
     If nRes = 0 Then
-        WScript.Echo "Расчет завершен успешно"
+        ' Получаем результирующее сообщение
+        Dim resultMsg
+        resultMsg = spFWDynamic.ResultMessage
+        
+        ' Разбиваем на строки
+        Dim msgLines, i, logLine
+        msgLines = Split(resultMsg, vbCrLf)
+        If UBound(msgLines) = -1 Then
+            msgLines = Split(resultMsg, vbLf)
+        End If
+        
+        ' Записываем все логи в Excel
+        For i = 0 To UBound(msgLines)
+            logLine = Trim(msgLines(i))
+            If Len(logLine) > 0 Then
+                ws.Cells(rowNum, 1).Value = rowNum - 1
+                ws.Cells(rowNum, 2).Value = "FWDynamic"
+                ws.Cells(rowNum, 3).Value = logLine
+                rowNum = rowNum + 1
+            End If
+        Next
         
         ' Форматирование
         ws.Columns.AutoFit
@@ -55,23 +64,3 @@ If Not spFWDynamic Is Nothing Then
 Else
     MsgBox "FWDynamic недоступен", vbCritical, "Ошибка"
 End If
-
-' Обработчик события OnLog
-Sub Rastr_OnLog(Code, Level, StageId, TableName, TableIndex, Description, FormName)
-    ws.Cells(rowNum, 1).Value = rowNum - 1
-    ws.Cells(rowNum, 2).Value = "OnLog"
-    ws.Cells(rowNum, 3).Value = Description
-    rowNum = rowNum + 1
-    
-    WScript.Echo "OnLog: " & Description
-End Sub
-
-' Обработчик события prot
-Sub Rastr_prot(str)
-    ws.Cells(rowNum, 1).Value = rowNum - 1
-    ws.Cells(rowNum, 2).Value = "prot"
-    ws.Cells(rowNum, 3).Value = str
-    rowNum = rowNum + 1
-    
-    WScript.Echo "prot: " & str
-End Sub
