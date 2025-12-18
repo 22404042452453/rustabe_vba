@@ -10,8 +10,9 @@ ws.Name = "События"
 
 ' Заголовок
 ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Событие"
-ws.Range("A1:B1").Font.Bold = True
+ws.Cells(1, 2).Value = "Таблица"
+ws.Cells(1, 3).Value = "Найдена"
+ws.Range("A1:C1").Font.Bold = True
 
 ' Запускаем расчет динамики
 Set spFWDynamic = Rastr.FWDynamic
@@ -20,49 +21,34 @@ If Not spFWDynamic Is Nothing Then
     nRes = spFWDynamic.Run()
     
     If nRes = 0 Then
-        ' Вывод всех таблиц - ДОБАВЛЕНО ЗДЕСЬ
-        Set wsTables = wb.Worksheets.Add
-        wsTables.Name = "Таблицы"
-        wsTables.Cells(1, 1).Value = "Таблицы Rastr"
-        wsTables.Cells(1, 1).Font.Bold = True
-        r = 2
-        For Each tbl In Rastr.Tables
-            wsTables.Cells(r, 1).Value = tbl.Name
-            r = r + 1
-        Next
-        wsTables.Columns.AutoFit
-        
-        ' Поиск событий
         rowNum = 2
         On Error Resume Next
         
-        ' Таблица dyn_log или dynlog
-        Set tblLog = Rastr.Tables("dyn_log")
-        If tblLog Is Nothing Then Set tblLog = Rastr.Tables("dynlog")
-        If tblLog Is Nothing Then Set tblLog = Rastr.Tables("log")
-        If tblLog Is Nothing Then Set tblLog = Rastr.Tables("events")
-        If tblLog Is Nothing Then Set tblLog = Rastr.Tables("dyn_events")
+        ' Список возможных таблиц для проверки
+        tableNames = Array("dyn_log", "dynlog", "log", "events", "dyn_events", _
+                          "arblok", "ar_block", "dynamic_log", "calc_log", _
+                          "generator_log", "line_log", "protection_log")
         
-        If Not tblLog Is Nothing Then
-            For i = 0 To tblLog.Size - 1
-                ws.Cells(rowNum, 1).Value = i + 1
-                msg = tblLog.Cols("message").Z(i)
-                If msg = "" Then msg = tblLog.Cols("text").Z(i)
-                If msg = "" Then msg = tblLog.Cols("log").Z(i)
-                ws.Cells(rowNum, 2).Value = msg
-                rowNum = rowNum + 1
-            Next
-        Else
-            ws.Cells(rowNum, 1).Value = 1
-            ws.Cells(rowNum, 2).Value = spFWDynamic.ResultMessage
-        End If
+        ' Проверяем каждую таблицу
+        For i = 0 To UBound(tableNames)
+            ws.Cells(rowNum, 1).Value = i + 1
+            ws.Cells(rowNum, 2).Value = tableNames(i)
+            
+            Set tbl = Rastr.Tables(tableNames(i))
+            If Not tbl Is Nothing Then
+                ws.Cells(rowNum, 3).Value = "ДА (строк: " & tbl.Size & ")"
+            Else
+                ws.Cells(rowNum, 3).Value = "НЕТ"
+            End If
+            
+            rowNum = rowNum + 1
+        Next
         
         On Error GoTo 0
         
         ws.Columns.AutoFit
         
-        totalLines = rowNum - 2
-        MsgBox "Найдено событий: " & totalLines & vbCrLf & "Список таблиц на вкладке 'Таблицы'", vbInformation, "Готово"
+        MsgBox "Проверка таблиц завершена. Найдите таблицу со статусом 'ДА'", vbInformation, "Готово"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
