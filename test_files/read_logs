@@ -9,8 +9,9 @@ Set ws = wb.Worksheets(1)
 ws.Name = "Логи"
 
 ' Заголовок
-ws.Cells(1, 1).Value = "Текст лога"
-ws.Range("A1").Font.Bold = True
+ws.Cells(1, 1).Value = "№"
+ws.Cells(1, 2).Value = "Текст лога"
+ws.Range("A1:B1").Font.Bold = True
 
 ' Запускаем расчет динамики
 Set spFWDynamic = Rastr.FWDynamic
@@ -19,17 +20,29 @@ If Not spFWDynamic Is Nothing Then
     nRes = spFWDynamic.Run()
     
     If nRes = 0 Then
-        ' Прямая запись ResultMessage в ячейку
-        ws.Cells(2, 1).Value = spFWDynamic.ResultMessage
+        ' Получаем результирующее сообщение
+        resultMsg = spFWDynamic.ResultMessage
         
-        ' Включаем перенос текста в ячейке
-        ws.Cells(2, 1).WrapText = True
+        ' Разбиваем на строки разными способами
+        msgLines = Split(resultMsg, vbCrLf)
+        If UBound(msgLines) = 0 Then
+            msgLines = Split(resultMsg, vbLf)
+        End If
+        If UBound(msgLines) = 0 Then
+            msgLines = Split(resultMsg, vbCr)
+        End If
+        
+        ' Выгружаем построчно
+        For i = 0 To UBound(msgLines)
+            ws.Cells(i + 2, 1).Value = i + 1
+            ws.Cells(i + 2, 2).Value = msgLines(i)
+        Next
         
         ' Форматирование
-        ws.Columns("A:A").ColumnWidth = 150
-        ws.Rows("2:2").AutoFit
+        ws.Columns.AutoFit
         
-        MsgBox "Логи выгружены в ячейку A2", vbInformation, "Выгрузка завершена"
+        totalLines = UBound(msgLines) + 1
+        MsgBox "Выгружено строк: " & totalLines, vbInformation, "Готово"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
