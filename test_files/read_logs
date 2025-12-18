@@ -1,43 +1,13 @@
-' --- Модуль класса (вставьте в новый модуль класса, назовите его "RastrEvents") ---
+' --- Один модуль, без класса ---
 Option Explicit
 
-Public WithEvents RastrObj As Object
-Private ws As Worksheet
-Private rowNum As Long
+' Глобальные переменные для событий
+Public ws As Worksheet
+Public rowNum As Long
 
-Public Sub Initialize(rastrInstance As Object, worksheet As Worksheet, startRow As Long)
-    Set RastrObj = rastrInstance
-    Set ws = worksheet
-    rowNum = startRow
-End Sub
-
-Private Sub RastrObj_OnLog(ByVal Code As Long, ByVal Level As Long, _
-                           ByVal StageId As Long, ByVal TableName As String, _
-                           ByVal TableIndex As Long, ByVal Description As String, _
-                           ByVal FormName As String)
-    ws.Cells(rowNum, 1).Value = rowNum - 1
-    ws.Cells(rowNum, 2).Value = "OnLog"
-    ws.Cells(rowNum, 3).Value = Description
-    rowNum = rowNum + 1
-    
-    Debug.Print "OnLog: " & Description
-End Sub
-
-Private Sub RastrObj_prot(ByVal str As String)
-    ws.Cells(rowNum, 1).Value = rowNum - 1
-    ws.Cells(rowNum, 2).Value = "prot"
-    ws.Cells(rowNum, 3).Value = str
-    rowNum = rowNum + 1
-    
-    Debug.Print "prot: " & str
-End Sub
-
-
-' --- Основной код (вставьте в обычный модуль) ---
 Sub CollectDynamicLogs()
     ' Инициализация Excel для результатов
     Dim wb As Workbook
-    Dim ws As Worksheet
     
     Set wb = Workbooks.Add
     Set ws = wb.Worksheets(1)
@@ -49,32 +19,64 @@ Sub CollectDynamicLogs()
     ws.Cells(1, 3).Value = "Описание"
     ws.Range("A1:C1").Font.Bold = True
     
+    rowNum = 2
+    
     ' Создаем объект Rastr
     Dim Rastr As Object
     Set Rastr = CreateObject("Astra.Rastr")
     
-    ' Создаем обработчик событий
-    Dim rastrEvents As New RastrEvents
-    rastrEvents.Initialize Rastr, ws, 2
+    ' Загрузка файла (если нужно)
+    ' Rastr.Load 1, "C:\путь\к\файлу.rg2", ""
     
-    ' Запускаем расчет динамики
+    ' Получаем FWDynamic
     Dim spFWDynamic As Object
     Set spFWDynamic = Rastr.FWDynamic
     
     If Not spFWDynamic Is Nothing Then
-        Debug.Print "Начало расчета..."
         
+        ' Вариант 1: Попробуем через свойство Rastr.Protocol
+        On Error Resume Next
+        Dim oldProtocol As String
+        oldProtocol = Rastr.Protocol
+        
+        ' Запускаем расчет
+        Debug.Print "Начало расчета..."
         Dim nRes As Long
         nRes = spFWDynamic.Run()
         
         If nRes = 0 Then
-            Debug.Print "Расчет завершен успешно"
+            Debug.Print "Расчет завершен"
+            
+            ' Получаем протокол после расчета
+            Dim protocol As String
+            protocol = Rastr.Protocol
+            
+            ' Разбиваем на строки
+            Dim lines As Variant
+            lines = Split(protocol, vbCrLf)
+            If UBound(lines) = 0 Then lines = Split(protocol, vbLf)
+            If UBound(lines) = 0 Then lines = Split(protocol, vbCr)
+            
+            ' Выгружаем в Excel
+            Dim i As Long
+            For i = 0 To UBound(lines)
+                If Trim(lines(i)) <> "" Then
+                    ws.Cells(rowNum, 1).Value = rowNum - 1
+                    ws.Cells(rowNum, 2).Value = "Protocol"
+                    ws.Cells(rowNum, 3).Value = Trim(lines(i))
+                    rowNum = rowNum + 1
+                End If
+            Next i
+            
+            On Error GoTo 0
             
             ' Форматирование
             ws.Columns.AutoFit
             ws.Columns("C:C").ColumnWidth = 150
             
-            MsgBox "Логи собраны!", vbInformation, "Готово"
+            Dim totalLines As Long
+            totalLines = rowNum - 2
+            MsgBox "Собрано логов: " & totalLines, vbInformation, "Готово"
         Else
             MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
         End If
