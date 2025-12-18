@@ -27,33 +27,37 @@ If Not spFWDynamic Is Nothing Then
         Dim fso
         Set fso = CreateObject("Scripting.FileSystemObject")
         Dim file
-        Set file = fso.CreateTextFile("C:\temp\resultMsg.txt")
+        Set file = fso.CreateTextFile("C:\temp\resultMsg.txt", True)
         file.Write resultMsg
         file.Close
 
-        ' Разбиваем на строки
+        ' Разбиваем на строки - пробуем разные варианты
         msgLines = Split(resultMsg, vbCrLf)
-        If UBound(msgLines) = -1 Then
+        If UBound(msgLines) = 0 Or UBound(msgLines) = -1 Then
             msgLines = Split(resultMsg, vbLf)
+        End If
+        If UBound(msgLines) = 0 Or UBound(msgLines) = -1 Then
+            msgLines = Split(resultMsg, vbCr)
+        End If
+        If UBound(msgLines) = 0 Or UBound(msgLines) = -1 Then
+            msgLines = Split(resultMsg, Chr(10))
         End If
 
         ' Выгружаем все строки в Excel
         rowNum = 2
         For i = 0 To UBound(msgLines)
             logLine = Trim(msgLines(i))
-            If Len(logLine) > 0 Then ' Пропускаем пустые строки
-                ws.Cells(rowNum, 1).Value = rowNum - 1
-                ws.Cells(rowNum, 2).Value = logLine
-                rowNum = rowNum + 1
-            End If
+            ws.Cells(rowNum, 1).Value = i + 1
+            ws.Cells(rowNum, 2).Value = logLine
+            rowNum = rowNum + 1
         Next
 
         ' Форматирование
         ws.Columns.AutoFit
         
         ' Итоговое сообщение
-        totalLines = rowNum - 2
-        MsgBox "Выгружено строк логов: " & totalLines, vbInformation, "Выгрузка завершена"
+        totalLines = UBound(msgLines) + 1
+        MsgBox "Выгружено строк логов: " & totalLines & vbCrLf & "Проверьте файл C:\temp\resultMsg.txt", vbInformation, "Выгрузка завершена"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
