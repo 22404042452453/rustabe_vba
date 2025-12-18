@@ -1,4 +1,4 @@
-' --- Выгрузка логов динамики в Excel ---
+' --- Поиск логов в FWDynamic ---
 
 ' Инициализация Excel для результатов
 Set xl = CreateObject("Excel.Application")
@@ -6,12 +6,13 @@ xl.Visible = True
 xl.DisplayAlerts = False
 Set wb = xl.Workbooks.Add
 Set ws = wb.Worksheets(1)
-ws.Name = "Логи"
+ws.Name = "Свойства FWDynamic"
 
 ' Заголовок
 ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Текст лога"
-ws.Range("A1:B1").Font.Bold = True
+ws.Cells(1, 2).Value = "Свойство"
+ws.Cells(1, 3).Value = "Значение"
+ws.Range("A1:C1").Font.Bold = True
 
 ' Запускаем расчет динамики
 Set spFWDynamic = Rastr.FWDynamic
@@ -20,34 +21,54 @@ If Not spFWDynamic Is Nothing Then
     nRes = spFWDynamic.Run()
     
     If nRes = 0 Then
-        ' Пробуем получить логи разными способами
+        rowNum = 2
         
-        ' Вариант 1: Через LogMessages (если есть)
-        If Not IsEmpty(spFWDynamic.LogMessages) Then
-            logArray = spFWDynamic.LogMessages
-            For i = 0 To UBound(logArray)
-                ws.Cells(i + 2, 1).Value = i + 1
-                ws.Cells(i + 2, 2).Value = logArray(i)
-            Next
-        ' Вариант 2: Через Log (если есть)
-        ElseIf Not IsEmpty(spFWDynamic.Log) Then
-            logText = spFWDynamic.Log
-            msgLines = Split(logText, vbCrLf)
-            If UBound(msgLines) = 0 Then msgLines = Split(logText, vbLf)
-            For i = 0 To UBound(msgLines)
-                ws.Cells(i + 2, 1).Value = i + 1
-                ws.Cells(i + 2, 2).Value = msgLines(i)
-            Next
-        ' Вариант 3: Только ResultMessage
-        Else
-            ws.Cells(2, 1).Value = 1
-            ws.Cells(2, 2).Value = spFWDynamic.ResultMessage
-        End If
+        ' Проверяем различные свойства которые могут содержать логи
+        On Error Resume Next
+        
+        ' ResultMessage
+        ws.Cells(rowNum, 1).Value = rowNum - 1
+        ws.Cells(rowNum, 2).Value = "ResultMessage"
+        ws.Cells(rowNum, 3).Value = spFWDynamic.ResultMessage
+        rowNum = rowNum + 1
+        
+        ' Messages
+        ws.Cells(rowNum, 1).Value = rowNum - 1
+        ws.Cells(rowNum, 2).Value = "Messages"
+        ws.Cells(rowNum, 3).Value = spFWDynamic.Messages
+        rowNum = rowNum + 1
+        
+        ' Log
+        ws.Cells(rowNum, 1).Value = rowNum - 1
+        ws.Cells(rowNum, 2).Value = "Log"
+        ws.Cells(rowNum, 3).Value = spFWDynamic.Log
+        rowNum = rowNum + 1
+        
+        ' Logs
+        ws.Cells(rowNum, 1).Value = rowNum - 1
+        ws.Cells(rowNum, 2).Value = "Logs"
+        ws.Cells(rowNum, 3).Value = spFWDynamic.Logs
+        rowNum = rowNum + 1
+        
+        ' Output
+        ws.Cells(rowNum, 1).Value = rowNum - 1
+        ws.Cells(rowNum, 2).Value = "Output"
+        ws.Cells(rowNum, 3).Value = spFWDynamic.Output
+        rowNum = rowNum + 1
+        
+        ' GetLog
+        ws.Cells(rowNum, 1).Value = rowNum - 1
+        ws.Cells(rowNum, 2).Value = "GetLog()"
+        ws.Cells(rowNum, 3).Value = spFWDynamic.GetLog()
+        rowNum = rowNum + 1
+        
+        On Error GoTo 0
         
         ' Форматирование
         ws.Columns.AutoFit
+        ws.Columns("C:C").ColumnWidth = 100
         
-        MsgBox "Логи выгружены", vbInformation, "Готово"
+        MsgBox "Проверьте колонку C - там должны быть логи", vbInformation, "Готово"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
