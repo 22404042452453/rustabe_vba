@@ -1,64 +1,10 @@
-' --- Поиск всех логов событий динамики ---
-
-' Инициализация Excel для результатов
-Set xl = CreateObject("Excel.Application")
-xl.Visible = True
-xl.DisplayAlerts = False
-Set wb = xl.Workbooks.Add
-Set ws = wb.Worksheets(1)
-ws.Name = "События"
-
-' Заголовок
-ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Событие"
-ws.Range("A1:B1").Font.Bold = True
-
-' Запускаем расчет динамики
-Set spFWDynamic = Rastr.FWDynamic
-
-If Not spFWDynamic Is Nothing Then
-    nRes = spFWDynamic.Run()
-    
-    If nRes = 0 Then
-        rowNum = 2
-        
-        ' Проверяем таблицы Rastr которые могут содержать события
-        On Error Resume Next
-        
-        ' Таблица dyn_log или dynlog
-        Set tblLog = Rastr.Tables("dyn_log")
-        If tblLog Is Nothing Then Set tblLog = Rastr.Tables("dynlog")
-        If tblLog Is Nothing Then Set tblLog = Rastr.Tables("log")
-        If tblLog Is Nothing Then Set tblLog = Rastr.Tables("events")
-        If tblLog Is Nothing Then Set tblLog = Rastr.Tables("dyn_events")
-        
-        If Not tblLog Is Nothing Then
-            For i = 0 To tblLog.Size - 1
-                tblLog.SetSel i
-                ws.Cells(rowNum, 1).Value = i + 1
-                ' Пробуем разные поля
-                msg = tblLog.Cols("message").Z(i)
-                If msg = "" Then msg = tblLog.Cols("text").Z(i)
-                If msg = "" Then msg = tblLog.Cols("log").Z(i)
-                ws.Cells(rowNum, 2).Value = msg
-                rowNum = rowNum + 1
-            Next
-        Else
-            ' Если таблицы нет, выводим ResultMessage
-            ws.Cells(rowNum, 1).Value = 1
-            ws.Cells(rowNum, 2).Value = spFWDynamic.ResultMessage
-        End If
-        
-        On Error GoTo 0
-        
-        ' Форматирование
-        ws.Columns.AutoFit
-        
-        totalLines = rowNum - 2
-        MsgBox "Найдено событий: " & totalLines, vbInformation, "Готово"
-    Else
-        MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
-    End If
-Else
-    MsgBox "FWDynamic недоступен", vbCritical, "Ошибка"
-End If
+' Вывод всех таблиц
+Set wsTables = wb.Worksheets.Add
+wsTables.Name = "Таблицы"
+wsTables.Cells(1, 1).Value = "Таблицы Rastr"
+wsTables.Cells(1, 1).Font.Bold = True
+r = 2
+For Each tbl In Rastr.Tables
+    wsTables.Cells(r, 1).Value = tbl.Name
+    r = r + 1
+Next
