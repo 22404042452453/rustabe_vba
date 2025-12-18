@@ -1,4 +1,4 @@
-' --- Поиск всех логов событий динамики ---
+' --- Выгрузка логов динамики в Excel ---
 
 ' Инициализация Excel для результатов
 Set xl = CreateObject("Excel.Application")
@@ -6,12 +6,12 @@ xl.Visible = True
 xl.DisplayAlerts = False
 Set wb = xl.Workbooks.Add
 Set ws = wb.Worksheets(1)
-ws.Name = "События"
+ws.Name = "Логи"
 
 ' Заголовок
 ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Таблица"
-ws.Cells(1, 3).Value = "Найдена"
+ws.Cells(1, 2).Value = "Тип"
+ws.Cells(1, 3).Value = "Текст"
 ws.Range("A1:C1").Font.Bold = True
 
 ' Запускаем расчет динамики
@@ -22,33 +22,48 @@ If Not spFWDynamic Is Nothing Then
     
     If nRes = 0 Then
         rowNum = 2
+        
+        ' ResultMessage
+        ws.Cells(rowNum, 1).Value = 1
+        ws.Cells(rowNum, 2).Value = "ResultMessage"
+        ws.Cells(rowNum, 3).Value = spFWDynamic.ResultMessage
+        rowNum = rowNum + 1
+        
+        ' AdditionalInformation
         On Error Resume Next
+        additionalInfo = spFWDynamic.AdditionalInformation
         
-        ' Список возможных таблиц для проверки
-        tableNames = Array("dyn_log", "dynlog", "log", "events", "dyn_events", _
-                          "arblok", "ar_block", "dynamic_log", "calc_log", _
-                          "generator_log", "line_log", "protection_log")
-        
-        ' Проверяем каждую таблицу
-        For i = 0 To UBound(tableNames)
-            ws.Cells(rowNum, 1).Value = i + 1
-            ws.Cells(rowNum, 2).Value = tableNames(i)
+        If Not IsEmpty(additionalInfo) And additionalInfo <> "" Then
+            ' Пробуем разбить на строки
+            msgLines = Split(additionalInfo, vbCrLf)
+            If UBound(msgLines) = 0 Then msgLines = Split(additionalInfo, vbLf)
+            If UBound(msgLines) = 0 Then msgLines = Split(additionalInfo, vbCr)
             
-            Set tbl = Rastr.Tables(tableNames(i))
-            If Not tbl Is Nothing Then
-                ws.Cells(rowNum, 3).Value = "ДА (строк: " & tbl.Size & ")"
-            Else
-                ws.Cells(rowNum, 3).Value = "НЕТ"
-            End If
-            
+            ' Выгружаем каждую строку
+            For i = 0 To UBound(msgLines)
+                If Trim(msgLines(i)) <> "" Then
+                    ws.Cells(rowNum, 1).Value = rowNum - 1
+                    ws.Cells(rowNum, 2).Value = "AdditionalInfo"
+                    ws.Cells(rowNum, 3).Value = Trim(msgLines(i))
+                    rowNum = rowNum + 1
+                End If
+            Next
+        Else
+            ' Если не разбилось, выводим целиком
+            ws.Cells(rowNum, 1).Value = 2
+            ws.Cells(rowNum, 2).Value = "AdditionalInfo"
+            ws.Cells(rowNum, 3).Value = additionalInfo
             rowNum = rowNum + 1
-        Next
+        End If
         
         On Error GoTo 0
         
+        ' Форматирование
         ws.Columns.AutoFit
+        ws.Columns("C:C").ColumnWidth = 150
         
-        MsgBox "Проверка таблиц завершена. Найдите таблицу со статусом 'ДА'", vbInformation, "Готово"
+        totalLines = rowNum - 2
+        MsgBox "Выгружено строк: " & totalLines, vbInformation, "Готово"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
