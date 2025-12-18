@@ -1,4 +1,4 @@
-' --- Сбор логов во время расчета динамики ---
+' --- Сбор логов во время расчета через события ---
 
 ' Инициализация Excel для результатов
 Set xl = CreateObject("Excel.Application")
@@ -13,70 +13,60 @@ ws.Cells(1, 1).Value = "№"
 ws.Cells(1, 2).Value = "Текст лога"
 ws.Range("A1:B1").Font.Bold = True
 
-' Запускаем расчет динамики
+' Глобальный счетчик для логов
+Dim rowNum
+rowNum = 2
+
+' Получаем FWDynamic
 Set spFWDynamic = Rastr.FWDynamic
 
 If Not spFWDynamic Is Nothing Then
     
-    ' Массив для сбора логов
-    Dim logArray()
-    ReDim logArray(1000) ' Начальный размер
-    logCount = 0
-    lastMessage = ""
-    
-    ' Запускаем расчет
-    nRes = spFWDynamic.Run()
-    
-    ' Пробуем собрать логи после расчета через таблицы
+    ' Подписываемся на события (если есть)
     On Error Resume Next
     
-    ' Проверяем таблицу Generator (генераторы)
-    Set tblGen = Rastr.Tables("Generator")
-    If Not tblGen Is Nothing Then
-        ws.Cells(2, 1).Value = "Найдена таблица Generator, строк: " & tblGen.Size
-    End If
+    ' Пробуем разные варианты событий
+    ' Вариант 1: OnLog
+    WScript.ConnectObject spFWDynamic, "FWDynamic_"
     
-    ' Проверяем таблицу Vetv (ветви/линии)
-    Set tblVetv = Rastr.Tables("Vetv")
-    If Not tblVetv Is Nothing Then
-        ws.Cells(3, 1).Value = "Найдена таблица Vetv, строк: " & tblVetv.Size
-    End If
-    
-    ' Проверяем таблицу Node (узлы)
-    Set tblNode = Rastr.Tables("Node")
-    If Not tblNode Is Nothing Then
-        ws.Cells(4, 1).Value = "Найдена таблица Node, строк: " & tblNode.Size
-    End If
-    
-    ' Может быть есть таблица с результатами расчета?
-    Set tblResult = Rastr.Tables("Results")
-    If tblResult Is Nothing Then Set tblResult = Rastr.Tables("CalcResults")
-    If tblResult Is Nothing Then Set tblResult = Rastr.Tables("DynResults")
-    
-    If Not tblResult Is Nothing Then
-        ws.Cells(5, 1).Value = "Найдена таблица Results, строк: " & tblResult.Size
-        
-        ' Пробуем извлечь данные
-        For i = 0 To tblResult.Size - 1
-            msg = ""
-            ' Пробуем разные названия колонок
-            msg = tblResult.Cols("message").Z(i)
-            If msg = "" Then msg = tblResult.Cols("log").Z(i)
-            If msg = "" Then msg = tblResult.Cols("text").Z(i)
-            If msg = "" Then msg = tblResult.Cols("event").Z(i)
-            
-            If msg <> "" Then
-                ws.Cells(6 + i, 1).Value = i + 1
-                ws.Cells(6 + i, 2).Value = msg
-            End If
-        Next
-    End If
+    ' Запускаем расчет с периодическим опросом
+    nRes = spFWDynamic.Run()
     
     On Error GoTo 0
     
+    ' После расчета выводим финальное сообщение
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = spFWDynamic.ResultMessage
+    
     ws.Columns.AutoFit
     
-    MsgBox "Проверка таблиц завершена. Посмотрите какие таблицы найдены.", vbInformation, "Готово"
+    totalLines = rowNum - 2
+    MsgBox "Собрано логов: " & totalLines, vbInformation, "Готово"
 Else
     MsgBox "FWDynamic недоступен", vbCritical, "Ошибка"
 End If
+
+' Обработчики событий
+Sub FWDynamic_OnLog(message)
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = message
+    rowNum = rowNum + 1
+End Sub
+
+Sub FWDynamic_OnMessage(message)
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = message
+    rowNum = rowNum + 1
+End Sub
+
+Sub FWDynamic_OnEvent(message)
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = message
+    rowNum = rowNum + 1
+End Sub
+
+Sub FWDynamic_OnProgress(message)
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = message
+    rowNum = rowNum + 1
+End Sub
