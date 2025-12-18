@@ -1,68 +1,86 @@
-' --- Сбор логов динамики через события ---
+' --- Модуль класса (вставьте в новый модуль класса, назовите его "RastrEvents") ---
+Option Explicit
 
-' Инициализация Excel для результатов
-Set xl = CreateObject("Excel.Application")
-xl.Visible = True
-xl.DisplayAlerts = False
-Set wb = xl.Workbooks.Add
-Set ws = wb.Worksheets(1)
-ws.Name = "Логи"
+Public WithEvents RastrObj As ASTRALib.Rastr
+Private ws As Worksheet
+Private rowNum As Long
 
-' Заголовки
-ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Источник"
-ws.Cells(1, 3).Value = "Описание"
-ws.Range("A1:C1").Font.Bold = True
-
-' Глобальный счетчик строк
-Dim g_rowNum
-g_rowNum = 2
-
-' Подключаемся к объекту Rastr с событиями
-WScript.ConnectObject Rastr, "Rastr_"
-
-' Запускаем расчет динамики
-Set spFWDynamic = Rastr.FWDynamic
-
-If Not spFWDynamic Is Nothing Then
-    WScript.Echo "Начало расчета..."
-    
-    nRes = spFWDynamic.Run()
-    
-    If nRes = 0 Then
-        WScript.Echo "Расчет завершен успешно"
-        
-        ' Форматирование
-        ws.Columns.AutoFit
-        ws.Columns("C:C").ColumnWidth = 150
-        
-        totalLines = g_rowNum - 2
-        MsgBox "Собрано логов: " & totalLines, vbInformation, "Готово"
-    Else
-        MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
-    End If
-Else
-    MsgBox "FWDynamic недоступен", vbCritical, "Ошибка"
-End If
-
-' Обработчик события OnLog
-Sub Rastr_OnLog(Code, Level, StageId, TableName, TableIndex, Description, FormName)
-    ws.Cells(g_rowNum, 1).Value = g_rowNum - 1
-    ws.Cells(g_rowNum, 2).Value = "OnLog"
-    ws.Cells(g_rowNum, 3).Value = Description
-    g_rowNum = g_rowNum + 1
-    
-    ' Выводим в консоль для отладки
-    WScript.Echo "OnLog: " & Description
+Public Sub Initialize(rastrInstance As ASTRALib.Rastr, worksheet As Worksheet, startRow As Long)
+    Set RastrObj = rastrInstance
+    Set ws = worksheet
+    rowNum = startRow
 End Sub
 
-' Обработчик события prot
-Sub Rastr_prot(str)
-    ws.Cells(g_rowNum, 1).Value = g_rowNum - 1
-    ws.Cells(g_rowNum, 2).Value = "prot"
-    ws.Cells(g_rowNum, 3).Value = str
-    g_rowNum = g_rowNum + 1
+Private Sub RastrObj_OnLog(ByVal Code As ASTRALib.LogErrorCodes, ByVal Level As Long, _
+                           ByVal StageId As Long, ByVal TableName As String, _
+                           ByVal TableIndex As Long, ByVal Description As String, _
+                           ByVal FormName As String)
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = "OnLog"
+    ws.Cells(rowNum, 3).Value = Description
+    rowNum = rowNum + 1
     
-    ' Выводим в консоль для отладки
-    WScript.Echo "prot: " & str
+    Debug.Print "OnLog: " & Description
+End Sub
+
+Private Sub RastrObj_prot(ByVal str As String)
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = "prot"
+    ws.Cells(rowNum, 3).Value = str
+    rowNum = rowNum + 1
+    
+    Debug.Print "prot: " & str
+End Sub
+
+
+' --- Основной код (вставьте в обычный модуль) ---
+Sub CollectDynamicLogs()
+    ' Инициализация Excel для результатов
+    Dim xl As Object
+    Dim wb As Workbook
+    Dim ws As Worksheet
+    
+    Set xl = Application
+    Set wb = xl.Workbooks.Add
+    Set ws = wb.Worksheets(1)
+    ws.Name = "Логи"
+    
+    ' Заголовки
+    ws.Cells(1, 1).Value = "№"
+    ws.Cells(1, 2).Value = "Источник"
+    ws.Cells(1, 3).Value = "Описание"
+    ws.Range("A1:C1").Font.Bold = True
+    
+    ' Создаем объект Rastr
+    Dim Rastr As Object
+    Set Rastr = CreateObject("Astra.Rastr")
+    
+    ' Создаем обработчик событий
+    Dim rastrEvents As New RastrEvents
+    rastrEvents.Initialize Rastr, ws, 2
+    
+    ' Запускаем расчет динамики
+    Dim spFWDynamic As Object
+    Set spFWDynamic = Rastr.FWDynamic
+    
+    If Not spFWDynamic Is Nothing Then
+        Debug.Print "Начало расчета..."
+        
+        Dim nRes As Long
+        nRes = spFWDynamic.Run()
+        
+        If nRes = 0 Then
+            Debug.Print "Расчет завершен успешно"
+            
+            ' Форматирование
+            ws.Columns.AutoFit
+            ws.Columns("C:C").ColumnWidth = 150
+            
+            MsgBox "Логи собраны!", vbInformation, "Готово"
+        Else
+            MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
+        End If
+    Else
+        MsgBox "FWDynamic недоступен", vbCritical, "Ошибка"
+    End If
 End Sub
