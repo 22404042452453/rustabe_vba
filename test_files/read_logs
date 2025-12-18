@@ -9,9 +9,8 @@ Set ws = wb.Worksheets(1)
 ws.Name = "Логи"
 
 ' Заголовок
-ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Текст лога"
-ws.Range("A1:B1").Font.Bold = True
+ws.Cells(1, 1).Value = "Текст лога"
+ws.Range("A1").Font.Bold = True
 
 ' Запускаем расчет динамики
 Set spFWDynamic = Rastr.FWDynamic
@@ -20,35 +19,17 @@ If Not spFWDynamic Is Nothing Then
     nRes = spFWDynamic.Run()
     
     If nRes = 0 Then
-        ' Получаем результирующее сообщение
-        resultMsg = spFWDynamic.ResultMessage
+        ' Прямая запись ResultMessage в ячейку
+        ws.Cells(2, 1).Value = spFWDynamic.ResultMessage
         
-        ' Выводим весь текст в одну ячейку для проверки
-        ws.Cells(2, 3).Value = resultMsg
+        ' Включаем перенос текста в ячейке
+        ws.Cells(2, 1).WrapText = True
         
-        ' Пробуем разные варианты разбиения
-        msgLines = Split(resultMsg, Chr(13) & Chr(10)) ' vbCrLf
-        If UBound(msgLines) <= 0 Then
-            msgLines = Split(resultMsg, Chr(10)) ' vbLf
-        End If
-        If UBound(msgLines) <= 0 Then
-            msgLines = Split(resultMsg, Chr(13)) ' vbCr
-        End If
-
-        ' Выгружаем все строки в Excel
-        rowNum = 2
-        For i = 0 To UBound(msgLines)
-            ws.Cells(rowNum, 1).Value = i + 1
-            ws.Cells(rowNum, 2).Value = msgLines(i)
-            rowNum = rowNum + 1
-        Next
-
         ' Форматирование
-        ws.Columns("A:B").AutoFit
+        ws.Columns("A:A").ColumnWidth = 150
+        ws.Rows("2:2").AutoFit
         
-        ' Итоговое сообщение
-        totalLines = UBound(msgLines) + 1
-        MsgBox "Выгружено строк логов: " & totalLines & vbCrLf & "Весь текст в колонке C для проверки", vbInformation, "Выгрузка завершена"
+        MsgBox "Логи выгружены в ячейку A2", vbInformation, "Выгрузка завершена"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
