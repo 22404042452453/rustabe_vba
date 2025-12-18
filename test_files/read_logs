@@ -1,86 +1,77 @@
-' --- Один модуль, без класса ---
+' --- Сбор логов динамики через события в VBScript ---
+
 Option Explicit
 
-' Глобальные переменные для событий
-Public ws As Worksheet
-Public rowNum As Long
+' Глобальные переменные
+Dim xl, wb, ws
+Dim rowNum
 
-Sub CollectDynamicLogs()
-    ' Инициализация Excel для результатов
-    Dim wb As Workbook
+' Инициализация Excel
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+xl.DisplayAlerts = False
+Set wb = xl.Workbooks.Add
+Set ws = wb.Worksheets(1)
+ws.Name = "Логи"
+
+' Заголовки
+ws.Cells(1, 1).Value = "№"
+ws.Cells(1, 2).Value = "Источник"
+ws.Cells(1, 3).Value = "Описание"
+ws.Range("A1:C1").Font.Bold = True
+
+rowNum = 2
+
+' Создаем объект Rastr с поддержкой событий
+Dim Rastr
+Set Rastr = WScript.CreateObject("Astra.Rastr", "Rastr_")
+
+' Загрузка файла (если нужно)
+' Rastr.Load 1, "C:\путь\к\файлу.rg2", ""
+
+' Запускаем расчет динамики
+Dim spFWDynamic
+Set spFWDynamic = Rastr.FWDynamic
+
+If Not spFWDynamic Is Nothing Then
+    WScript.Echo "Начало расчета..."
     
-    Set wb = Workbooks.Add
-    Set ws = wb.Worksheets(1)
-    ws.Name = "Логи"
+    Dim nRes
+    nRes = spFWDynamic.Run()
     
-    ' Заголовки
-    ws.Cells(1, 1).Value = "№"
-    ws.Cells(1, 2).Value = "Источник"
-    ws.Cells(1, 3).Value = "Описание"
-    ws.Range("A1:C1").Font.Bold = True
-    
-    rowNum = 2
-    
-    ' Создаем объект Rastr
-    Dim Rastr As Object
-    Set Rastr = CreateObject("Astra.Rastr")
-    
-    ' Загрузка файла (если нужно)
-    ' Rastr.Load 1, "C:\путь\к\файлу.rg2", ""
-    
-    ' Получаем FWDynamic
-    Dim spFWDynamic As Object
-    Set spFWDynamic = Rastr.FWDynamic
-    
-    If Not spFWDynamic Is Nothing Then
+    If nRes = 0 Then
+        WScript.Echo "Расчет завершен успешно"
         
-        ' Вариант 1: Попробуем через свойство Rastr.Protocol
-        On Error Resume Next
-        Dim oldProtocol As String
-        oldProtocol = Rastr.Protocol
+        ' Форматирование
+        ws.Columns.AutoFit
+        ws.Columns("C:C").ColumnWidth = 150
         
-        ' Запускаем расчет
-        Debug.Print "Начало расчета..."
-        Dim nRes As Long
-        nRes = spFWDynamic.Run()
-        
-        If nRes = 0 Then
-            Debug.Print "Расчет завершен"
-            
-            ' Получаем протокол после расчета
-            Dim protocol As String
-            protocol = Rastr.Protocol
-            
-            ' Разбиваем на строки
-            Dim lines As Variant
-            lines = Split(protocol, vbCrLf)
-            If UBound(lines) = 0 Then lines = Split(protocol, vbLf)
-            If UBound(lines) = 0 Then lines = Split(protocol, vbCr)
-            
-            ' Выгружаем в Excel
-            Dim i As Long
-            For i = 0 To UBound(lines)
-                If Trim(lines(i)) <> "" Then
-                    ws.Cells(rowNum, 1).Value = rowNum - 1
-                    ws.Cells(rowNum, 2).Value = "Protocol"
-                    ws.Cells(rowNum, 3).Value = Trim(lines(i))
-                    rowNum = rowNum + 1
-                End If
-            Next i
-            
-            On Error GoTo 0
-            
-            ' Форматирование
-            ws.Columns.AutoFit
-            ws.Columns("C:C").ColumnWidth = 150
-            
-            Dim totalLines As Long
-            totalLines = rowNum - 2
-            MsgBox "Собрано логов: " & totalLines, vbInformation, "Готово"
-        Else
-            MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
-        End If
+        Dim totalLines
+        totalLines = rowNum - 2
+        MsgBox "Собрано логов: " & totalLines, vbInformation, "Готово"
     Else
-        MsgBox "FWDynamic недоступен", vbCritical, "Ошибка"
+        MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
     End If
+Else
+    MsgBox "FWDynamic недоступен", vbCritical, "Ошибка"
+End If
+
+' Обработчик события OnLog
+Sub Rastr_OnLog(Code, Level, StageId, TableName, TableIndex, Description, FormName)
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = "OnLog"
+    ws.Cells(rowNum, 3).Value = Description
+    rowNum = rowNum + 1
+    
+    WScript.Echo "OnLog: " & Description
+End Sub
+
+' Обработчик события prot
+Sub Rastr_prot(str)
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = "prot"
+    ws.Cells(rowNum, 3).Value = str
+    rowNum = rowNum + 1
+    
+    WScript.Echo "prot: " & str
 End Sub
