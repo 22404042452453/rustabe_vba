@@ -359,9 +359,8 @@ Sub PrintReportMultiSheet(errNodes, warnNodes, cntErrNodes, cntWarnNodes, _
     Set xlBook = xlApp.Workbooks.Add
     
     ' Добавляем нужное количество листов (по умолчанию 3, нам надо 5)
-    Do While xlBook.Sheets.Count < 5
-        xlBook.Sheets.Add After:=xlBook.Sheets(xlBook.Sheets.Count)
-    Loop
+    xlBook.Worksheets.Add
+    xlBook.Worksheets.Add
     
     ' === ВКЛАДКА 1: СВОДКА ===
     Set shSummary = xlBook.Sheets(1)
