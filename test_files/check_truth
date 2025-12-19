@@ -284,32 +284,88 @@ Sub CheckTopology(errors, warnings, errorCount, warnCount)
 End Sub
 
 ' ============================================================
-' Вывод отчета
+' Экспорт отчета в Excel
 ' ============================================================
 Sub PrintReport(errors, warnings, errorCount, warnCount)
-    Dim report, i
+    On Error Resume Next
     
-    report = String(60, "=") & vbCrLf
-    report = report & "ОТЧЕТ О ПРОВЕРКЕ МОДЕЛИ" & vbCrLf
-    report = report & String(60, "=") & vbCrLf & vbCrLf
+    Dim xlApp, xlBook, xlSheet
+    Dim errArr, warnArr
+    Dim i, row
+    Dim filePath
     
-    If errorCount = 0 And warnCount = 0 Then
-        report = report & "Ошибок и предупреждений не обнаружено" & vbCrLf
-    Else
-        If errorCount > 0 Then
-            report = report & "КРИТИЧЕСКИЕ ОШИБКИ (" & errorCount & "):" & vbCrLf
-            report = report & errors & vbCrLf
-        End If
-        
-        If warnCount > 0 Then
-            report = report & "ПРЕДУПРЕЖДЕНИЯ (" & warnCount & "):" & vbCrLf
-            report = report & warnings & vbCrLf
-        End If
+    filePath = "d:\PycharmProjects\test_model\validation_report.xlsx"
+    
+    ' Создаем Excel
+    Set xlApp = CreateObject("Excel.Application")
+    If xlApp Is Nothing Then
+        MsgBox "Не удалось создать Excel! Проверьте установку MS Office.", vbCritical, "Ошибка"
+        Exit Sub
     End If
     
-    report = report & String(60, "=")
+    Set xlBook = xlApp.Workbooks.Add
+    Set xlSheet = xlBook.Sheets(1)
+    xlSheet.Name = "Отчет валидации"
     
-    MsgBox report, vbInformation, "Результаты проверки"
+    ' Заголовки
+    xlSheet.Cells(1, 1).Value = "Тип"
+    xlSheet.Cells(1, 2).Value = "Сообщение"
+    xlSheet.Cells(1, 3).Value = "Дата проверки"
+    
+    ' Форматирование заголовков
+    xlSheet.Range("A1:C1").Font.Bold = True
+    xlSheet.Range("A1:C1").Interior.Color = RGB(200, 200, 200)
+    
+    row = 2
+    
+    ' Записываем ошибки
+    If Len(errors) > 0 Then
+        errArr = Split(errors, vbCrLf)
+        For i = 0 To UBound(errArr)
+            If Len(Trim(errArr(i))) > 0 Then
+                xlSheet.Cells(row, 1).Value = "ОШИБКА"
+                xlSheet.Cells(row, 1).Font.Color = RGB(255, 0, 0)
+                xlSheet.Cells(row, 2).Value = errArr(i)
+                xlSheet.Cells(row, 3).Value = Now()
+                row = row + 1
+            End If
+        Next
+    End If
+    
+    ' Записываем предупреждения
+    If Len(warnings) > 0 Then
+        warnArr = Split(warnings, vbCrLf)
+        For i = 0 To UBound(warnArr)
+            If Len(Trim(warnArr(i))) > 0 Then
+                xlSheet.Cells(row, 1).Value = "ПРЕДУПРЕЖДЕНИЕ"
+                xlSheet.Cells(row, 1).Font.Color = RGB(255, 165, 0)
+                xlSheet.Cells(row, 2).Value = warnArr(i)
+                xlSheet.Cells(row, 3).Value = Now()
+                row = row + 1
+            End If
+        Next
+    End If
+    
+    ' Если нет ошибок
+    If errorCount = 0 And warnCount = 0 Then
+        xlSheet.Cells(2, 1).Value = "OK"
+        xlSheet.Cells(2, 1).Font.Color = RGB(0, 128, 0)
+        xlSheet.Cells(2, 2).Value = "Ошибок и предупреждений не обнаружено"
+        xlSheet.Cells(2, 3).Value = Now()
+    End If
+    
+    ' Автоширина колонок
+    xlSheet.Columns("A:C").AutoFit
+    
+    ' Сохраняем и показываем
+    xlBook.SaveAs filePath
+    xlApp.Visible = True
+    
+    MsgBox "Отчет сохранен: " & filePath & vbCrLf & _
+           "Ошибок: " & errorCount & vbCrLf & _
+           "Предупреждений: " & warnCount, vbInformation, "Готово"
+    
+    On Error GoTo 0
 End Sub
 
 ' ============================================================
