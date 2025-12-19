@@ -4,11 +4,39 @@
 ' ============================================================
 
 Sub Main()
-    On Error Resume Next
+    ' ОТЛАДКА: Временно отключаем подавление ошибок
+    ' On Error Resume Next
     
     Dim errors, warnings
     Dim errorCount, warnCount
     Dim errNum
+    Dim tNode, tVetv, tGen
+    
+    ' === ДИАГНОСТИКА ===
+    MsgBox "Скрипт запущен!", vbInformation, "Диагностика"
+    
+    ' Проверяем доступность таблиц
+    Set tNode = Rastr.Tables("node")
+    If tNode Is Nothing Then
+        MsgBox "Таблица 'node' не найдена!", vbCritical, "Ошибка"
+    Else
+        MsgBox "Таблица 'node' OK. Записей: " & tNode.Count, vbInformation, "Диагностика"
+    End If
+    
+    Set tVetv = Rastr.Tables("vetv")
+    If tVetv Is Nothing Then
+        MsgBox "Таблица 'vetv' не найдена!", vbCritical, "Ошибка"
+    Else
+        MsgBox "Таблица 'vetv' OK. Записей: " & tVetv.Count, vbInformation, "Диагностика"
+    End If
+    
+    Set tGen = Rastr.Tables("Generator")
+    If tGen Is Nothing Then
+        MsgBox "Таблица 'Generator' не найдена (это нормально если нет генераторов)", vbExclamation, "Предупреждение"
+    Else
+        MsgBox "Таблица 'Generator' OK. Записей: " & tGen.Count, vbInformation, "Диагностика"
+    End If
+    ' === КОНЕЦ ДИАГНОСТИКИ ===
     
     errors = ""
     warnings = ""
