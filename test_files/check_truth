@@ -311,3 +311,8 @@ Sub PrintReport(errors, warnings, errorCount, warnCount)
     
     MsgBox report, vbInformation, "Результаты проверки"
 End Sub
+
+' ============================================================
+' ЗАПУСК СКРИПТА
+' ============================================================
+Call Main()
