@@ -5,44 +5,37 @@
 ' ============================================================
 
 Sub Main()
-    Dim errors As String
-    Dim warnings As String
-    Dim errorCount As Integer
-    Dim warnCount As Integer
+    Dim errors, warnings
+    Dim errorCount, warnCount
     
     errors = ""
     warnings = ""
     errorCount = 0
     warnCount = 0
     
-    MsgBox "Начинаем проверку модели..."
+    MsgBox "Начинаем проверку модели...", vbInformation
     
     ' Проверка узлов
-    Call CheckNodes(errors, warnings, errorCount, warnCount)
+    CheckNodes errors, warnings, errorCount, warnCount
     
     ' Проверка ветвей
-    Call CheckBranches(errors, warnings, errorCount, warnCount)
+    CheckBranches errors, warnings, errorCount, warnCount
     
     ' Проверка генераторов
-    Call CheckGenerators(errors, warnings, errorCount, warnCount)
+    CheckGenerators errors, warnings, errorCount, warnCount
     
     ' Проверка топологии
-    Call CheckTopology(errors, warnings, errorCount, warnCount)
+    CheckTopology errors, warnings, errorCount, warnCount
     
     ' Вывод отчета
-    Call PrintReport(errors, warnings, errorCount, warnCount)
+    PrintReport errors, warnings, errorCount, warnCount
 End Sub
 
 ' ============================================================
 ' Проверка таблицы УЗЛЫ
 ' ============================================================
-Sub CheckNodes(ByRef errors As String, ByRef warnings As String, _
-               ByRef errorCount As Integer, ByRef warnCount As Integer)
-    
-    Dim t As Table
-    Dim i As Long
-    Dim ny, uhom, vzd, pn, qn, nodeName
-    Dim tgPhi As Double
+Sub CheckNodes(errors, warnings, errorCount, warnCount)
+    Dim t, i, ny, uhom, vzd, pn, qn, nodeName, tgPhi
     
     Set t = Rastr.Tables("node")
     
@@ -68,7 +61,7 @@ Sub CheckNodes(ByRef errors As String, ByRef warnings As String, _
         ' Проверка 2: Напряжение в допустимых пределах (±10%)
         If vzd < 0.9 Or vzd > 1.15 Then
             warnings = warnings & "Узел " & ny & " (" & nodeName & "): " & _
-                      "Напряжение " & Format(vzd, "0.000") & " о.е. вне нормы" & vbCrLf
+                      "Напряжение " & FormatNumber(vzd, 3) & " о.е. вне нормы" & vbCrLf
             warnCount = warnCount + 1
         End If
         
@@ -77,7 +70,7 @@ Sub CheckNodes(ByRef errors As String, ByRef warnings As String, _
             tgPhi = Abs(qn / pn)
             If tgPhi > 2.0 Then
                 warnings = warnings & "Узел " & ny & " (" & nodeName & "): " & _
-                          "Подозрительный tgφ = " & Format(tgPhi, "0.00") & vbCrLf
+                          "Подозрительный tgφ = " & FormatNumber(tgPhi, 2) & vbCrLf
                 warnCount = warnCount + 1
             End If
         End If
@@ -88,19 +81,14 @@ Sub CheckNodes(ByRef errors As String, ByRef warnings As String, _
                     "Отрицательное напряжение!" & vbCrLf
             errorCount = errorCount + 1
         End If
-    Next i
+    Next
 End Sub
 
 ' ============================================================
 ' Проверка таблицы ВЕТВИ
 ' ============================================================
-Sub CheckBranches(ByRef errors As String, ByRef warnings As String, _
-                  ByRef errorCount As Integer, ByRef warnCount As Integer)
-    
-    Dim t As Table
-    Dim i As Long
-    Dim ip, iq, r, x, ktr, sta
-    Dim rxRatio As Double
+Sub CheckBranches(errors, warnings, errorCount, warnCount)
+    Dim t, i, ip, iq, r, x, ktr, sta, rxRatio
     
     Set t = Rastr.Tables("vetv")
     
@@ -133,7 +121,7 @@ Sub CheckBranches(ByRef errors As String, ByRef warnings As String, _
             rxRatio = r / x
             If rxRatio > 1.0 Then
                 warnings = warnings & "Ветвь " & ip & "-" & iq & ": " & _
-                          "Высокое R/X = " & Format(rxRatio, "0.00") & vbCrLf
+                          "Высокое R/X = " & FormatNumber(rxRatio, 2) & vbCrLf
                 warnCount = warnCount + 1
             End If
         End If
@@ -141,7 +129,7 @@ Sub CheckBranches(ByRef errors As String, ByRef warnings As String, _
         ' Проверка 4: Коэффициент трансформации
         If ktr <> 0 And (ktr < 0.8 Or ktr > 1.2) Then
             warnings = warnings & "Ветвь " & ip & "-" & iq & ": " & _
-                      "Необычный Kтр = " & Format(ktr, "0.000") & vbCrLf
+                      "Необычный Kтр = " & FormatNumber(ktr, 3) & vbCrLf
             warnCount = warnCount + 1
         End If
         
@@ -155,21 +143,17 @@ Sub CheckBranches(ByRef errors As String, ByRef warnings As String, _
         ' Проверка 6: Очень большое сопротивление (оборванная линия?)
         If x > 1000 Then
             warnings = warnings & "Ветвь " & ip & "-" & iq & ": " & _
-                      "Очень большое X = " & Format(x, "0.0") & vbCrLf
+                      "Очень большое X = " & FormatNumber(x, 1) & vbCrLf
             warnCount = warnCount + 1
         End If
-    Next i
+    Next
 End Sub
 
 ' ============================================================
 ' Проверка таблицы ГЕНЕРАТОРЫ
 ' ============================================================
-Sub CheckGenerators(ByRef errors As String, ByRef warnings As String, _
-                    ByRef errorCount As Integer, ByRef warnCount As Integer)
-    
-    Dim t As Table
-    Dim i As Long
-    Dim node, pgen, qgen, qmin, qmax, pnom, genName
+Sub CheckGenerators(errors, warnings, errorCount, warnCount)
+    Dim t, i, node, pgen, qgen, qmin, qmax, pnom, genName
     
     Set t = Rastr.Tables("Generator")
     
@@ -187,14 +171,14 @@ Sub CheckGenerators(ByRef errors As String, ByRef warnings As String, _
         ' Проверка 1: Генерация больше номинала
         If pnom > 0 And pgen > pnom * 1.1 Then
             warnings = warnings & "Ген. в узле " & node & " (" & genName & "): " & _
-                      "P=" & Format(pgen, "0.0") & " > Pном=" & Format(pnom, "0.0") & vbCrLf
+                      "P=" & FormatNumber(pgen, 1) & " > Pном=" & FormatNumber(pnom, 1) & vbCrLf
             warnCount = warnCount + 1
         End If
         
         ' Проверка 2: Q вне пределов
         If qgen < qmin - 0.01 Or qgen > qmax + 0.01 Then
             warnings = warnings & "Ген. в узле " & node & " (" & genName & "): " & _
-                      "Q=" & Format(qgen, "0.0") & " вне [" & qmin & ", " & qmax & "]" & vbCrLf
+                      "Q=" & FormatNumber(qgen, 1) & " вне [" & qmin & ", " & qmax & "]" & vbCrLf
             warnCount = warnCount + 1
         End If
         
@@ -208,7 +192,7 @@ Sub CheckGenerators(ByRef errors As String, ByRef warnings As String, _
         ' Проверка 4: Отрицательная генерация
         If pgen < -0.1 Then
             warnings = warnings & "Ген. в узле " & node & " (" & genName & "): " & _
-                      "Отрицательная P=" & Format(pgen, "0.0") & " (двигатель?)" & vbCrLf
+                      "Отрицательная P=" & FormatNumber(pgen, 1) & " (двигатель?)" & vbCrLf
             warnCount = warnCount + 1
         End If
         
@@ -218,21 +202,14 @@ Sub CheckGenerators(ByRef errors As String, ByRef warnings As String, _
                       "Нулевая номинальная мощность" & vbCrLf
             warnCount = warnCount + 1
         End If
-    Next i
+    Next
 End Sub
 
 ' ============================================================
 ' Проверка топологии (изолированные узлы)
 ' ============================================================
-Sub CheckTopology(ByRef errors As String, ByRef warnings As String, _
-                  ByRef errorCount As Integer, ByRef warnCount As Integer)
-    
-    Dim tNode As Table
-    Dim tVetv As Table
-    Dim i As Long, j As Long
-    Dim ny, ip, iq, sta
-    Dim isConnected As Boolean
-    Dim nodeName
+Sub CheckTopology(errors, warnings, errorCount, warnCount)
+    Dim tNode, tVetv, i, j, ny, ip, iq, sta, isConnected, nodeName, f
     
     Set tNode = Rastr.Tables("node")
     Set tVetv = Rastr.Tables("vetv")
@@ -256,27 +233,27 @@ Sub CheckTopology(ByRef errors As String, ByRef warnings As String, _
                 isConnected = True
                 Exit For
             End If
-        Next j
+        Next
         
         If Not isConnected Then
             warnings = warnings & "Узел " & ny & " (" & nodeName & "): " & _
                       "Изолирован (нет подключенных ветвей)" & vbCrLf
             warnCount = warnCount + 1
         End If
-    Next i
+    Next
 End Sub
 
 ' ============================================================
 ' Вывод отчета
 ' ============================================================
-Sub PrintReport(errors As String, warnings As String, _
-                errorCount As Integer, warnCount As Integer)
+Sub PrintReport(errors, warnings, errorCount, warnCount)
+    Dim report, sep
     
-    Dim report As String
+    sep = String(60, "=")
     
-    report = String(60, "=") & vbCrLf
+    report = sep & vbCrLf
     report = report & "ОТЧЕТ О ПРОВЕРКЕ МОДЕЛИ" & vbCrLf
-    report = report & String(60, "=") & vbCrLf & vbCrLf
+    report = report & sep & vbCrLf & vbCrLf
     
     If errorCount = 0 And warnCount = 0 Then
         report = report & "✓ Ошибок и предупреждений не обнаружено" & vbCrLf
@@ -292,15 +269,8 @@ Sub PrintReport(errors As String, warnings As String, _
         End If
     End If
     
-    report = report & String(60, "=") & vbCrLf
+    report = report & sep & vbCrLf
     
     ' Вывод в окно
     MsgBox report, vbInformation, "Результаты проверки"
-    
-    ' Опционально: сохранение в файл
-    ' Dim fso, file
-    ' Set fso = CreateObject("Scripting.FileSystemObject")
-    ' Set file = fso.CreateTextFile("C:\rastr_validation_report.txt", True)
-    ' file.WriteLine report
-    ' file.Close
 End Sub
