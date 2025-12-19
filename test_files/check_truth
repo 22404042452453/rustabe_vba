@@ -67,9 +67,11 @@ End Sub
 Sub CheckNodes(errors, warnings, errorCount, warnCount)
     On Error Resume Next
     
-    Dim t, i, ny, uhom, vzd, pn, qn, nodeName, tgPhi
+    Dim t, tGen, i, j, ny, uhom, vzd, pn, qn, nodeName, tgPhi
+    Dim hasGenerator
     
     Set t = Rastr.Tables("node")
+    Set tGen = Rastr.Tables("Generator")
     If t Is Nothing Then Exit Sub
     
     For i = 0 To t.Count - 1
@@ -97,11 +99,23 @@ Sub CheckNodes(errors, warnings, errorCount, warnCount)
         End If
         
         ' Проверка 3: Подозрительный tgφ
-        If Abs(pn) > 0.01 Then
+        ' Сначала проверяем - есть ли генератор в этом узле (может быть СК)
+        hasGenerator = False
+        If Not tGen Is Nothing Then
+            For j = 0 To tGen.Count - 1
+                If tGen.Cols("Node").Z(j) = ny Then
+                    hasGenerator = True
+                    Exit For
+                End If
+            Next
+        End If
+        
+        ' Проверяем tgφ только если НЕТ генератора (иначе может быть СК на ХХ)
+        If Not hasGenerator And Abs(pn) > 0.01 Then
             tgPhi = Abs(qn / pn)
             If tgPhi > 2.0 Then
                 warnings = warnings & "Узел " & ny & " (" & nodeName & "): " & _
-                          "Подозрительный tgφ = " & Round(tgPhi, 2) & vbCrLf
+                          "Подозрительный tgφ = " & Round(tgPhi, 2) & " (нет генератора)" & vbCrLf
                 warnCount = warnCount + 1
             End If
         End If
@@ -143,11 +157,18 @@ Sub CheckBranches(errors, warnings, errorCount, warnCount)
             errorCount = errorCount + 1
         End If
         
-        ' Проверка 2: Отрицательное сопротивление
-        If r < 0 Or x < 0 Then
+        ' Проверка 2: Отрицательное активное сопротивление - ОШИБКА
+        If r < 0 Then
             errors = errors & "Ветвь " & ip & "-" & iq & ": " & _
-                    "Отрицательное сопротивление (r=" & r & ", x=" & x & ")" & vbCrLf
+                    "Отрицательное активное R = " & r & vbCrLf
             errorCount = errorCount + 1
+        End If
+        
+        ' Проверка 2.1: Отрицательное реактивное - ПРЕДУПРЕЖДЕНИЕ (может быть СН трансформатора)
+        If x < 0 Then
+            warnings = warnings & "Ветвь " & ip & "-" & iq & ": " & _
+                    "Отрицательное X = " & x & " (СН трансформатора?)" & vbCrLf
+            warnCount = warnCount + 1
         End If
         
         ' Проверка 3: Соотношение R/X для ЛЭП
@@ -267,7 +288,7 @@ Sub CheckTopology(errors, warnings, errorCount, warnCount)
             iq = tVetv.Cols("iq").Z(j)
             sta = tVetv.Cols("sta").Z(j)
             
-            If sta = 1 And (ip = ny Or iq = ny) Then
+            If sta = 0 And (ip = ny Or iq = ny) Then
                 isConnected = True
                 Exit For
             End If
