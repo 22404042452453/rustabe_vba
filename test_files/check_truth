@@ -38,25 +38,34 @@ Sub Main()
     End If
     ' === КОНЕЦ ДИАГНОСТИКИ ===
     
-    errors = ""
-    warnings = ""
-    errorCount = 0
-    warnCount = 0
+    ' Переменные для сбора ошибок по категориям
+    Dim errNodes, warnNodes, errBranches, warnBranches
+    Dim errGens, warnGens, errTopo, warnTopo
+    Dim cntErrNodes, cntWarnNodes, cntErrBranches, cntWarnBranches
+    Dim cntErrGens, cntWarnGens, cntErrTopo, cntWarnTopo
+    
+    errNodes = "": warnNodes = "": cntErrNodes = 0: cntWarnNodes = 0
+    errBranches = "": warnBranches = "": cntErrBranches = 0: cntWarnBranches = 0
+    errGens = "": warnGens = "": cntErrGens = 0: cntWarnGens = 0
+    errTopo = "": warnTopo = "": cntErrTopo = 0: cntWarnTopo = 0
     
     ' Проверка узлов
-    Call CheckNodes(errors, warnings, errorCount, warnCount)
+    Call CheckNodes(errNodes, warnNodes, cntErrNodes, cntWarnNodes)
     
     ' Проверка ветвей
-    Call CheckBranches(errors, warnings, errorCount, warnCount)
+    Call CheckBranches(errBranches, warnBranches, cntErrBranches, cntWarnBranches)
     
     ' Проверка генераторов
-    Call CheckGenerators(errors, warnings, errorCount, warnCount)
+    Call CheckGenerators(errGens, warnGens, cntErrGens, cntWarnGens)
     
     ' Проверка топологии
-    Call CheckTopology(errors, warnings, errorCount, warnCount)
+    Call CheckTopology(errTopo, warnTopo, cntErrTopo, cntWarnTopo)
     
-    ' Вывод отчета
-    Call PrintReport(errors, warnings, errorCount, warnCount)
+    ' Вывод отчета с разбивкой по вкладкам
+    Call PrintReportMultiSheet(errNodes, warnNodes, cntErrNodes, cntWarnNodes, _
+                               errBranches, warnBranches, cntErrBranches, cntWarnBranches, _
+                               errGens, warnGens, cntErrGens, cntWarnGens, _
+                               errTopo, warnTopo, cntErrTopo, cntWarnTopo)
     
     On Error GoTo 0
 End Sub
@@ -324,7 +333,149 @@ Sub CheckTopology(errors, warnings, errorCount, warnCount)
 End Sub
 
 ' ============================================================
-' Экспорт отчета в Excel
+' Экспорт отчета в Excel (много вкладок)
+' ============================================================
+Sub PrintReportMultiSheet(errNodes, warnNodes, cntErrNodes, cntWarnNodes, _
+                          errBranches, warnBranches, cntErrBranches, cntWarnBranches, _
+                          errGens, warnGens, cntErrGens, cntWarnGens, _
+                          errTopo, warnTopo, cntErrTopo, cntWarnTopo)
+    On Error Resume Next
+    
+    Dim xlApp, xlBook
+    Dim shSummary, shNodes, shBranches, shGens, shTopo
+    Dim filePath, totalErr, totalWarn
+    
+    filePath = "d:\PycharmProjects\test_model\validation_report.xlsx"
+    totalErr = cntErrNodes + cntErrBranches + cntErrGens + cntErrTopo
+    totalWarn = cntWarnNodes + cntWarnBranches + cntWarnGens + cntWarnTopo
+    
+    ' Создаем Excel
+    Set xlApp = CreateObject("Excel.Application")
+    If xlApp Is Nothing Then
+        MsgBox "Не удалось создать Excel!", vbCritical, "Ошибка"
+        Exit Sub
+    End If
+    
+    Set xlBook = xlApp.Workbooks.Add
+    
+    ' Добавляем нужное количество листов (по умолчанию 3, нам надо 5)
+    Do While xlBook.Sheets.Count < 5
+        xlBook.Sheets.Add After:=xlBook.Sheets(xlBook.Sheets.Count)
+    Loop
+    
+    ' === ВКЛАДКА 1: СВОДКА ===
+    Set shSummary = xlBook.Sheets(1)
+    shSummary.Name = "Сводка"
+    shSummary.Cells(1, 1).Value = "ОТЧЕТ О ВАЛИДАЦИИ МОДЕЛИ"
+    shSummary.Cells(1, 1).Font.Bold = True
+    shSummary.Cells(1, 1).Font.Size = 14
+    shSummary.Cells(3, 1).Value = "Дата проверки:"
+    shSummary.Cells(3, 2).Value = Now()
+    shSummary.Cells(5, 1).Value = "Категория"
+    shSummary.Cells(5, 2).Value = "Ошибки"
+    shSummary.Cells(5, 3).Value = "Предупреждения"
+    shSummary.Range("A5:C5").Font.Bold = True
+    shSummary.Range("A5:C5").Interior.Color = RGB(200, 200, 200)
+    shSummary.Cells(6, 1).Value = "Узлы"
+    shSummary.Cells(6, 2).Value = cntErrNodes
+    shSummary.Cells(6, 3).Value = cntWarnNodes
+    shSummary.Cells(7, 1).Value = "Ветви"
+    shSummary.Cells(7, 2).Value = cntErrBranches
+    shSummary.Cells(7, 3).Value = cntWarnBranches
+    shSummary.Cells(8, 1).Value = "Генераторы"
+    shSummary.Cells(8, 2).Value = cntErrGens
+    shSummary.Cells(8, 3).Value = cntWarnGens
+    shSummary.Cells(9, 1).Value = "Топология"
+    shSummary.Cells(9, 2).Value = cntErrTopo
+    shSummary.Cells(9, 3).Value = cntWarnTopo
+    shSummary.Cells(10, 1).Value = "ИТОГО"
+    shSummary.Cells(10, 2).Value = totalErr
+    shSummary.Cells(10, 3).Value = totalWarn
+    shSummary.Range("A10:C10").Font.Bold = True
+    shSummary.Columns("A:C").AutoFit
+    
+    ' === ВКЛАДКА 2: УЗЛЫ ===
+    Set shNodes = xlBook.Sheets(2)
+    shNodes.Name = "Узлы"
+    Call FillSheet(shNodes, errNodes, warnNodes, cntErrNodes, cntWarnNodes)
+    
+    ' === ВКЛАДКА 3: ВЕТВИ ===
+    Set shBranches = xlBook.Sheets(3)
+    shBranches.Name = "Ветви"
+    Call FillSheet(shBranches, errBranches, warnBranches, cntErrBranches, cntWarnBranches)
+    
+    ' === ВКЛАДКА 4: ГЕНЕРАТОРЫ ===
+    Set shGens = xlBook.Sheets(4)
+    shGens.Name = "Генераторы"
+    Call FillSheet(shGens, errGens, warnGens, cntErrGens, cntWarnGens)
+    
+    ' === ВКЛАДКА 5: ТОПОЛОГИЯ ===
+    Set shTopo = xlBook.Sheets(5)
+    shTopo.Name = "Топология"
+    Call FillSheet(shTopo, errTopo, warnTopo, cntErrTopo, cntWarnTopo)
+    
+    ' Активируем первую вкладку
+    shSummary.Activate
+    
+    ' Сохраняем
+    xlBook.SaveAs filePath
+    xlApp.Visible = True
+    
+    MsgBox "Отчет сохранен: " & filePath & vbCrLf & _
+           "Всего ошибок: " & totalErr & vbCrLf & _
+           "Всего предупреждений: " & totalWarn, vbInformation, "Готово"
+    
+    On Error GoTo 0
+End Sub
+
+' ============================================================
+' Вспомогательная функция заполнения листа
+' ============================================================
+Sub FillSheet(sheet, errors, warnings, errCount, warnCount)
+    Dim arr, i, row
+    
+    sheet.Cells(1, 1).Value = "Тип"
+    sheet.Cells(1, 2).Value = "Сообщение"
+    sheet.Range("A1:B1").Font.Bold = True
+    sheet.Range("A1:B1").Interior.Color = RGB(200, 200, 200)
+    
+    row = 2
+    
+    If Len(errors) > 0 Then
+        arr = Split(errors, vbCrLf)
+        For i = 0 To UBound(arr)
+            If Len(Trim(arr(i))) > 0 Then
+                sheet.Cells(row, 1).Value = "ОШИБКА"
+                sheet.Cells(row, 1).Font.Color = RGB(255, 0, 0)
+                sheet.Cells(row, 2).Value = arr(i)
+                row = row + 1
+            End If
+        Next
+    End If
+    
+    If Len(warnings) > 0 Then
+        arr = Split(warnings, vbCrLf)
+        For i = 0 To UBound(arr)
+            If Len(Trim(arr(i))) > 0 Then
+                sheet.Cells(row, 1).Value = "ПРЕДУПР."
+                sheet.Cells(row, 1).Font.Color = RGB(255, 165, 0)
+                sheet.Cells(row, 2).Value = arr(i)
+                row = row + 1
+            End If
+        Next
+    End If
+    
+    If errCount = 0 And warnCount = 0 Then
+        sheet.Cells(2, 1).Value = "OK"
+        sheet.Cells(2, 1).Font.Color = RGB(0, 128, 0)
+        sheet.Cells(2, 2).Value = "Проблем не обнаружено"
+    End If
+    
+    sheet.Columns("A:B").AutoFit
+End Sub
+
+' ============================================================
+' Старая версия экспорта (не используется)
 ' ============================================================
 Sub PrintReport(errors, warnings, errorCount, warnCount)
     On Error Resume Next
