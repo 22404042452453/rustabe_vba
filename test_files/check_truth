@@ -92,6 +92,17 @@ Sub CheckNodes(errors, warnings, errorCount, warnCount)
         pn = t.Cols("pn").Z(i)
         qn = t.Cols("qn").Z(i)
         
+        ' Сначала определяем - есть ли генератор в этом узле
+        hasGenerator = False
+        If Not tGen Is Nothing Then
+            For j = 0 To tGen.Count - 1
+                If tGen.Cols("Node").Z(j) = ny Then
+                    hasGenerator = True
+                    Exit For
+                End If
+            Next
+        End If
+        
         ' Проверка 1: Стандартные классы напряжения
         If uhom <> 0.4 And uhom <> 6 And uhom <> 10 And uhom <> 35 And _
            uhom <> 110 And uhom <> 220 And uhom <> 330 And uhom <> 500 And _
@@ -101,18 +112,20 @@ Sub CheckNodes(errors, warnings, errorCount, warnCount)
             errorCount = errorCount + 1
         End If
         
-        ' Проверка 2: Заданное напряжение vzd в допустимых пределах (0.9 - 1.1 о.е.)
-        If vzd < 0.9 Or vzd > 1.1 Then
-            errors = errors & "Узел " & ny & " (" & nodeName & "): " & _
-                    "Uзд = " & Round(vzd, 3) & " о.е. вне пределов [0.9; 1.1]" & vbCrLf
-            errorCount = errorCount + 1
-        ElseIf vzd < 0.95 Or vzd > 1.05 Then
-            warnings = warnings & "Узел " & ny & " (" & nodeName & "): " & _
-                      "Uзд = " & Round(vzd, 3) & " о.е. близко к пределу" & vbCrLf
-            warnCount = warnCount + 1
+        ' Проверка 2: Заданное напряжение vzd - ТОЛЬКО для узлов с генератором
+        If hasGenerator Then
+            If vzd < 0.9 Or vzd > 1.1 Then
+                errors = errors & "Узел " & ny & " (" & nodeName & "): " & _
+                        "Uзд = " & Round(vzd, 3) & " о.е. вне пределов [0.9; 1.1]" & vbCrLf
+                errorCount = errorCount + 1
+            ElseIf vzd < 0.95 Or vzd > 1.05 Then
+                warnings = warnings & "Узел " & ny & " (" & nodeName & "): " & _
+                          "Uзд = " & Round(vzd, 3) & " о.е. близко к пределу" & vbCrLf
+                warnCount = warnCount + 1
+            End If
         End If
         
-        ' Проверка 2.1: Расчётное напряжение vras в допустимых пределах
+        ' Проверка 2.1: Расчётное напряжение vras - для ВСЕХ узлов
         If uhom > 0 Then
             vras_oe = vras / uhom   ' Переводим в о.е.
             If vras_oe < 0.9 Or vras_oe > 1.1 Then
@@ -126,17 +139,7 @@ Sub CheckNodes(errors, warnings, errorCount, warnCount)
             End If
         End If
         
-        ' Проверка 3: Подозрительный tgφ
-        ' Сначала проверяем - есть ли генератор в этом узле (может быть СК)
-        hasGenerator = False
-        If Not tGen Is Nothing Then
-            For j = 0 To tGen.Count - 1
-                If tGen.Cols("Node").Z(j) = ny Then
-                    hasGenerator = True
-                    Exit For
-                End If
-            Next
-        End If
+        ' Проверка 3: Подозрительный tgφ (только для нагрузочных узлов)
         
         ' Проверяем tgφ только если НЕТ генератора (иначе может быть СК на ХХ)
         If Not hasGenerator And Abs(pn) > 0.01 Then
