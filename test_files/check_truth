@@ -67,7 +67,7 @@ End Sub
 Sub CheckNodes(errors, warnings, errorCount, warnCount)
     On Error Resume Next
     
-    Dim t, tGen, i, j, ny, uhom, vzd, pn, qn, nodeName, tgPhi
+    Dim t, tGen, i, j, ny, uhom, vzd, vras, vras_oe, pn, qn, nodeName, tgPhi
     Dim hasGenerator
     
     Set t = Rastr.Tables("node")
@@ -79,6 +79,7 @@ Sub CheckNodes(errors, warnings, errorCount, warnCount)
         nodeName = t.Cols("name").Z(i)
         uhom = t.Cols("uhom").Z(i)
         vzd = t.Cols("vzd").Z(i)
+        vras = t.Cols("vras").Z(i)
         pn = t.Cols("pn").Z(i)
         qn = t.Cols("qn").Z(i)
         
@@ -91,11 +92,29 @@ Sub CheckNodes(errors, warnings, errorCount, warnCount)
             errorCount = errorCount + 1
         End If
         
-        ' Проверка 2: Напряжение в допустимых пределах
-        If vzd < 0.9 Or vzd > 1.15 Then
+        ' Проверка 2: Заданное напряжение vzd в допустимых пределах (0.9 - 1.1 о.е.)
+        If vzd < 0.9 Or vzd > 1.1 Then
+            errors = errors & "Узел " & ny & " (" & nodeName & "): " & _
+                    "Uзд = " & Round(vzd, 3) & " о.е. вне пределов [0.9; 1.1]" & vbCrLf
+            errorCount = errorCount + 1
+        ElseIf vzd < 0.95 Or vzd > 1.05 Then
             warnings = warnings & "Узел " & ny & " (" & nodeName & "): " & _
-                      "Напряжение " & Round(vzd, 3) & " о.е. вне нормы" & vbCrLf
+                      "Uзд = " & Round(vzd, 3) & " о.е. близко к пределу" & vbCrLf
             warnCount = warnCount + 1
+        End If
+        
+        ' Проверка 2.1: Расчётное напряжение vras в допустимых пределах
+        If uhom > 0 Then
+            vras_oe = vras / uhom   ' Переводим в о.е.
+            If vras_oe < 0.9 Or vras_oe > 1.1 Then
+                errors = errors & "Узел " & ny & " (" & nodeName & "): " & _
+                        "Uрас = " & Round(vras, 1) & " кВ (" & Round(vras_oe, 3) & " о.е.) вне пределов [0.9; 1.1]" & vbCrLf
+                errorCount = errorCount + 1
+            ElseIf vras_oe < 0.95 Or vras_oe > 1.05 Then
+                warnings = warnings & "Узел " & ny & " (" & nodeName & "): " & _
+                          "Uрас = " & Round(vras, 1) & " кВ (" & Round(vras_oe, 3) & " о.е.) близко к пределу" & vbCrLf
+                warnCount = warnCount + 1
+            End If
         End If
         
         ' Проверка 3: Подозрительный tgφ
