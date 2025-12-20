@@ -1,2 +1,5 @@
-Rastr.FWDynamic.Run()
-MsgBox Rastr.Tables("prot").Cols("Message").ZN(0)
+vbRastr.FWDynamic.Run()
+
+For i = 0 To Rastr.Tables.Count - 1
+    Debug.Print Rastr.Tables.Item(i).Name
+Next
