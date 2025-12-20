@@ -375,8 +375,7 @@ Sub CheckGenerators(errors, warnings, errorCount, warnCount)
     On Error Resume Next
     
     Dim t, i, node, pgen, qgen, qmin, qmax, pnom, genName, numGen, pnomTotal, qminTotal, qmaxTotal
-    Dim dCoef, modelType, xd, xq, xdPrime, xdDoublePrime
-    Dim usesParkGoreva
+    Dim dCoef, xd, xq, xd2, xq2, td01, usesParkGoreva
     
     Set t = Rastr.Tables("Generator")
     If t Is Nothing Then Exit Sub
@@ -396,7 +395,6 @@ Sub CheckGenerators(errors, warnings, errorCount, warnCount)
         
         ' Определяем, используется ли модель Парко-Горева
         ' Проверяем параметры: xd, xq, xd2, xq2, td01
-        Dim xd, xq, xd2, xq2, td01
         xd = t.Cols("xd").Z(i)
         xq = t.Cols("xq").Z(i)
         xd2 = t.Cols("xd2").Z(i)
