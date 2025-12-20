@@ -1,4 +1,4 @@
-vbRastr.FWDynamic.Run()
+Rastr.FWDynamic.Run()
 
 For i = 0 To Rastr.Tables.Count - 1
     Debug.Print Rastr.Tables.Item(i).Name
