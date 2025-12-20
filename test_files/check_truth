@@ -483,6 +483,46 @@ Sub CheckGenerators(errors, warnings, errorCount, warnCount)
     On Error GoTo 0
 End Sub
 
+
+' ============================================================
+' Проверка топологии
+' ============================================================
+Sub CheckTopology(errors, warnings, errorCount, warnCount)
+    On Error Resume Next
+    
+    Dim tNode, tVetv, i, j, ny, ip, iq, sta, isConnected, nodeName
+    
+    Set tNode = Rastr.Tables("node")
+    Set tVetv = Rastr.Tables("vetv")
+    If tNode Is Nothing Or tVetv Is Nothing Then Exit Sub
+    
+    For i = 0 To tNode.Count - 1
+        ny = tNode.Cols("ny").Z(i)
+        nodeName = tNode.Cols("name").Z(i)
+        
+        isConnected = False
+        
+        For j = 0 To tVetv.Count - 1
+            ip = tVetv.Cols("ip").Z(j)
+            iq = tVetv.Cols("iq").Z(j)
+            sta = tVetv.Cols("sta").Z(j)
+            
+            If sta = 0 And (ip = ny Or iq = ny) Then
+                isConnected = True
+                Exit For
+            End If
+        Next
+        
+        If Not isConnected Then
+            warnings = warnings & "Узел " & ny & " (" & nodeName & "): " & _
+                      "Изолирован (нет подключенных ветвей)" & vbCrLf
+            warnCount = warnCount + 1
+        End If
+    Next
+    
+    On Error GoTo 0
+End Sub
+
 ' ============================================================
 ' Экспорт отчета в Excel (много вкладок)
 ' ============================================================
