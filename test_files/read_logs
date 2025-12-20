@@ -1,7 +1,2 @@
-' Вариант 3: Только загрузка модуля
-Rastr.Load(1, "addinRastrProtocolViewer", "")
 Rastr.FWDynamic.Run()
-
-' Модуль сам создаст таблицу prot
-Set t = Rastr.Tables("prot")
-MsgBox "Записей в протоколе: " & t.Count
+MsgBox Rastr.Tables("prot").Cols("Message").ZN(0)
