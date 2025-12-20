@@ -169,6 +169,8 @@ Sub CheckBranches(errors, warnings, errorCount, warnCount)
     On Error Resume Next
     
     Dim t, i, ip, iq, r, x, ktr, sta, rxRatio
+    Dim v_ip, v_iq, uhom_ip, uhom_iq
+    Dim errorMessage, isValid
     
     Set t = Rastr.Tables("vetv")
     If t Is Nothing Then Exit Sub
@@ -212,11 +214,26 @@ Sub CheckBranches(errors, warnings, errorCount, warnCount)
             End If
         End If
         
-        ' Проверка 4: Коэффициент трансформации
-        If ktr <> 0 And (ktr < 0.8 Or ktr > 1.2) Then
-            warnings = warnings & "Ветвь " & ip & "-" & iq & ": " & _
-                      "Необычный Kтр = " & Round(ktr, 3) & vbCrLf
-            warnCount = warnCount + 1
+        ' Проверка 4: НОВЫЙ АЛГОРИТМ - Коэффициент трансформации с использованием напряжений
+        If ktr <> 0 Then
+            isValid = GetBranchVoltages(ip, iq, v_ip, v_iq, uhom_ip, uhom_iq)
+            
+            If isValid Then
+                ' Валидируем коэффициент трансформации
+                isValid = ValidateTransformerKtr(ip, iq, ktr, v_ip, v_iq, uhom_ip, uhom_iq, errorMessage)
+                
+                If Not isValid Then
+                    errors = errors & errorMessage & vbCrLf
+                    errorCount = errorCount + 1
+                End If
+            Else
+                ' Если не удалось получить напряжения узлов - используем старую проверку
+                If ktr < 0.8 Or ktr > 1.2 Then
+                    warnings = warnings & "Ветвь " & ip & "-" & iq & ": " & _
+                              "Необычный Kтр = " & Round(ktr, 3) & " (узлы не найдены)" & vbCrLf
+                    warnCount = warnCount + 1
+                End If
+            End If
         End If
         
         ' Проверка 5: Ветвь замкнута сама на себя
@@ -236,6 +253,116 @@ Sub CheckBranches(errors, warnings, errorCount, warnCount)
     
     On Error GoTo 0
 End Sub
+
+
+' ============================================================
+' Функция получения напряжений узла из таблицы узлов
+' ============================================================
+Function GetNodeVoltage(nodeNumber, ByRef vras, ByRef uhom)
+    On Error Resume Next
+    
+    Dim t, i, ny
+    
+    Set t = Rastr.Tables("node")
+    If t Is Nothing Then
+        GetNodeVoltage = False
+        Exit Function
+    End If
+    
+    ' Ищем узел с заданным номером
+    For i = 0 To t.Count - 1
+        ny = t.Cols("ny").Z(i)
+        If ny = nodeNumber Then
+            vras = t.Cols("vras").Z(i)
+            uhom = t.Cols("uhom").Z(i)
+            GetNodeVoltage = True
+            Exit Function
+        End If
+    Next
+    
+    ' Узел не найден
+    GetNodeVoltage = False
+    On Error GoTo 0
+End Function
+
+' ============================================================
+' Функция извлечения напряжений из ветви
+' ============================================================
+Function GetBranchVoltages(ip, iq, ByRef v_ip, ByRef v_iq, ByRef uhom_ip, ByRef uhom_iq)
+    On Error Resume Next
+    
+    Dim success_ip, success_iq
+    
+    ' Получаем напряжения для узла ip
+    success_ip = GetNodeVoltage(ip, v_ip, uhom_ip)
+    
+    ' Получаем напряжения для узла iq
+    success_iq = GetNodeVoltage(iq, v_iq, uhom_iq)
+    
+    ' Возвращаем True только если оба узла найдены
+    GetBranchVoltages = success_ip And success_iq
+    On Error GoTo 0
+End Function
+
+' ============================================================
+' Функция проверки коэффициента трансформации
+' ============================================================
+Function ValidateTransformerKtr(ip, iq, actualKtr, v_ip, v_iq, uhom_ip, uhom_iq, ByRef errorMessage)
+    On Error Resume Next
+    
+    Dim expectedKtr, deviation, v_higher, v_lower, uhom_higher, uhom_lower
+    
+    ' Проверяем валидность напряжений
+    If v_ip <= 0 Or v_iq <= 0 Then
+        errorMessage = "Некорректные напряжения: U" & ip & "=" & v_ip & ", U" & iq & "=" & v_iq
+        ValidateTransformerKtr = False
+        Exit Function
+    End If
+    
+    ' Определяем ВН (высшее напряжение) и НН (низшее напряжение)
+    If v_ip >= v_iq Then
+        v_higher = v_ip
+        v_lower = v_iq
+        uhom_higher = uhom_ip
+        uhom_lower = uhom_iq
+    Else
+        v_higher = v_iq
+        v_lower = v_ip
+        uhom_higher = uhom_iq
+        uhom_lower = uhom_ip
+    End If
+    
+    ' Рассчитываем ожидаемый коэффициент трансформации = НН/ВН
+    If v_higher <> 0 Then
+        expectedKtr = v_lower / v_higher
+    Else
+        errorMessage = "Деление на ноль при расчете ожидаемого kтр"
+        ValidateTransformerKtr = False
+        Exit Function
+    End If
+    
+    ' Проверяем отклонение
+    If expectedKtr <> 0 Then
+        deviation = Abs(actualKtr - expectedKtr) / expectedKtr * 100
+    Else
+        deviation = 0
+    End If
+    
+    ' Если отклонение больше 10% - ошибка
+    If deviation > 10 Then
+        errorMessage = "Ветвь " & ip & "-" & iq & ": Kтр=" & Round(actualKtr, 3) & _
+                      " отклоняется от ожидаемого " & Round(expectedKtr, 3) & _
+                      " на " & Round(deviation, 1) & "% (>10%)" & vbCrLf & _
+                      "  Напряжения: U" & ip & "=" & Round(v_ip, 1) & "кВ, U" & iq & "=" & Round(v_iq, 1) & "кВ" & vbCrLf & _
+                      "  Номинальные: Uном" & ip & "=" & Round(uhom_ip, 1) & "кВ, Uном" & iq & "=" & Round(uhom_iq, 1) & "кВ"
+        ValidateTransformerKtr = False
+    Else
+        errorMessage = ""
+        ValidateTransformerKtr = True
+    End If
+    
+    On Error GoTo 0
+End Function
 
 ' ============================================================
 ' Проверка таблицы ГЕНЕРАТОРЫ
