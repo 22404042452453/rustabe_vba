@@ -215,7 +215,7 @@ Sub CheckBranches(errors, warnings, errorCount, warnCount)
         End If
         
         ' Проверка 4: НОВЫЙ АЛГОРИТМ - Коэффициент трансформации с использованием напряжений
-        If ktr <> 0 Then
+        If ktr <> 0 And sta = 0 Then
             isValid = GetBranchVoltages(ip, iq, v_ip, v_iq, uhom_ip, uhom_iq)
             
             If isValid Then
