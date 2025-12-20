@@ -222,6 +222,10 @@ Sub CheckBranches(errors, warnings, errorCount, warnCount)
                 ' Валидируем коэффициент трансформации
                 isValid = ValidateTransformerKtr(ip, iq, ktr, v_ip, v_iq, uhom_ip, uhom_iq, errorMessage)
                 
+
+
+
+                
                 If Not isValid Then
                     errors = errors & errorMessage & vbCrLf
                     errorCount = errorCount + 1
@@ -365,12 +369,14 @@ Function ValidateTransformerKtr(ip, iq, actualKtr, v_ip, v_iq, uhom_ip, uhom_iq,
 End Function
 
 ' ============================================================
-' Проверка таблицы ГЕНЕРАТОРЫ
+' Проверка таблицы ГЕНЕРАТОРЫ (обновлённая версия)
 ' ============================================================
 Sub CheckGenerators(errors, warnings, errorCount, warnCount)
     On Error Resume Next
     
     Dim t, i, node, pgen, qgen, qmin, qmax, pnom, genName, numGen, pnomTotal, qminTotal, qmaxTotal
+    Dim dCoef, modelType, xd, xq, xdPrime, xdDoublePrime
+    Dim usesParkGoreva
     
     Set t = Rastr.Tables("Generator")
     If t Is Nothing Then Exit Sub
@@ -385,11 +391,29 @@ Sub CheckGenerators(errors, warnings, errorCount, warnCount)
         pnom = t.Cols("Pnom").Z(i)
         numGen = t.Cols("NumBrand").Z(i)
         
+        ' Получаем коэффициент демпфирования D
+        dCoef = t.Cols("D").Z(i)
+        
+        ' Пытаемся определить, используется ли модель Парко-Горева
+        ' Проверяем наличие характерных параметров
+        xd = t.Cols("Xd").Z(i)
+        xdPrime = t.Cols("Xd'").Z(i)
+        xdDoublePrime = t.Cols("Xd''").Z(i)
+        xq = t.Cols("Xq").Z(i)
+        
+        ' Если заданы реактивности по осям d и q, считаем что используется Парко-Горева
+        usesParkGoreva = False
+        If (xd > 0 Or xdPrime > 0 Or xdDoublePrime > 0 Or xq > 0) Then
+            usesParkGoreva = True
+        End If
+        
         ' Защита от нуля
         If numGen < 1 Then numGen = 1
         pnomTotal = pnom * numGen
         qminTotal = qmin * numGen
         qmaxTotal = qmax * numGen
+        
+        ' ===== СУЩЕСТВУЮЩИЕ ПРОВЕРКИ =====
         
         ' Проверка 1: Генерация больше суммарного номинала
         If pnomTotal > 0 And pgen > pnomTotal Then
@@ -425,6 +449,35 @@ Sub CheckGenerators(errors, warnings, errorCount, warnCount)
                       "Нулевая номинальная мощность" & vbCrLf
             warnCount = warnCount + 1
         End If
+        
+        ' ===== НОВАЯ ПРОВЕРКА: Коэффициент демпфирования D =====
+        
+        ' Если НЕ используется Парко-Горева, то D обязателен
+        If Not usesParkGoreva Then
+            If dCoef = 0 Or IsEmpty(dCoef) Or IsNull(dCoef) Then
+                errors = errors & "Ген. в узле " & node & " (" & genName & "): " & _
+                        "Отсутствует коэффициент демпфирования D (модель без Парко-Горева)" & vbCrLf
+                errorCount = errorCount + 1
+            ElseIf dCoef < 0 Then
+                errors = errors & "Ген. в узле " & node & " (" & genName & "): " & _
+                        "Отрицательный коэффициент D=" & Round(dCoef, 2) & vbCrLf
+                errorCount = errorCount + 1
+            ElseIf dCoef < 0.5 Or dCoef > 5.0 Then
+                warnings = warnings & "Ген. в узле " & node & " (" & genName & "): " & _
+                          "Подозрительное значение D=" & Round(dCoef, 2) & " (типично 1-3)" & vbCrLf
+                warnCount = warnCount + 1
+            End If
+        Else
+            ' Если используется Парко-Горева, D необязателен, но проверяем если задан
+            If dCoef <> 0 And Not IsEmpty(dCoef) And Not IsNull(dCoef) Then
+                If dCoef < 0 Then
+                    errors = errors & "Ген. в узле " & node & " (" & genName & "): " & _
+                            "Отрицательный D=" & Round(dCoef, 2) & " (модель Парко-Горева)" & vbCrLf
+                    errorCount = errorCount + 1
+                End If
+            End If
+        End If
+        
     Next
     
     On Error GoTo 0
