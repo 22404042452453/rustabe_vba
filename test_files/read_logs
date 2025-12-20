@@ -1,34 +1,145 @@
-' Самый простой вариант - прямое получение логов
+Option Explicit
 
-Set xl = CreateObject("Excel.Application")
-xl.Visible = True
-Set wb = xl.Workbooks.Add
-Set ws = wb.Worksheets(1)
-
-ws.Cells(1, 1).Value = "Логи динамики"
-ws.Cells(1, 1).Font.Bold = True
-
-Set spFWDynamic = Rastr.FWDynamic
-nRes = spFWDynamic.Run()
-
-' ВАРИАНТ 1: Через ResultMessage
-resultMsg = spFWDynamic.ResultMessage
-If Len(resultMsg) > 0 Then
-    lines = Split(resultMsg, vbCrLf)
-    For i = 0 To UBound(lines)
-        ws.Cells(i + 2, 1).Value = lines(i)
-    Next
-End If
-
-' ВАРИАНТ 2: Через Protocol (если есть)
-' protocol = spFWDynamic.Protocol
-' ws.Cells(2, 1).Value = protocol
-
-' ВАРИАНТ 3: Через таблицу prot
-' Set tProt = Rastr.Tables("prot")
-' For i = 0 To tProt.Count - 1
-'     ws.Cells(i + 2, 1).Value = tProt.Cols("Message").ZN(i)
-' Next
-
-ws.Columns.AutoFit
-MsgBox "Готово! Код возврата: " & nRes, vbInformation
+Sub GetDynamicLogs()
+    Dim xl As Object
+    Dim wb As Object
+    Dim ws As Object
+    Dim spFWDynamic As Object
+    Dim tProt As Object
+    Dim nRes As Long
+    Dim resultMsg As String
+    Dim protocol As String
+    Dim lines As Variant
+    Dim i As Long
+    Dim currentRow As Long
+    
+    ' Создание Excel
+    Set xl = CreateObject("Excel.Application")
+    xl.Visible = True
+    Set wb = xl.Workbooks.Add
+    Set ws = wb.Worksheets(1)
+    ws.Name = "Логи RastrWin"
+    
+    ' Заголовок
+    ws.Cells(1, 1).Value = "Логи динамики RastrWin"
+    ws.Cells(1, 1).Font.Bold = True
+    ws.Cells(1, 1).Font.Size = 14
+    
+    ' Получение объекта динамики
+    Set spFWDynamic = Rastr.FWDynamic
+    
+    ' Запуск расчёта
+    nRes = spFWDynamic.Run()
+    
+    currentRow = 3
+    
+    ' ========================================
+    ' ВАРИАНТ 1: ResultMessage (краткие итоги)
+    ' ========================================
+    ws.Cells(currentRow, 1).Value = "=== РЕЗУЛЬТАТ РАСЧЁТА ==="
+    ws.Cells(currentRow, 1).Font.Bold = True
+    currentRow = currentRow + 1
+    
+    On Error Resume Next
+    resultMsg = spFWDynamic.ResultMessage
+    On Error GoTo 0
+    
+    If Len(resultMsg) > 0 Then
+        lines = Split(resultMsg, vbCrLf)
+        For i = 0 To UBound(lines)
+            If Len(Trim(lines(i))) > 0 Then
+                ws.Cells(currentRow, 1).Value = lines(i)
+                currentRow = currentRow + 1
+            End If
+        Next
+    Else
+        ws.Cells(currentRow, 1).Value = "(нет сообщений)"
+        currentRow = currentRow + 1
+    End If
+    
+    currentRow = currentRow + 1
+    
+    ' ========================================
+    ' ВАРИАНТ 2: Protocol (полный протокол)
+    ' ========================================
+    ws.Cells(currentRow, 1).Value = "=== ПОЛНЫЙ ПРОТОКОЛ ==="
+    ws.Cells(currentRow, 1).Font.Bold = True
+    currentRow = currentRow + 1
+    
+    On Error Resume Next
+    protocol = spFWDynamic.Protocol
+    On Error GoTo 0
+    
+    If Len(protocol) > 0 Then
+        lines = Split(protocol, vbCrLf)
+        For i = 0 To UBound(lines)
+            If Len(Trim(lines(i))) > 0 Then
+                ws.Cells(currentRow, 1).Value = lines(i)
+                currentRow = currentRow + 1
+            End If
+        Next
+    Else
+        ws.Cells(currentRow, 1).Value = "(протокол пуст)"
+        currentRow = currentRow + 1
+    End If
+    
+    currentRow = currentRow + 1
+    
+    ' ========================================
+    ' ВАРИАНТ 3: Таблица prot (структурированный доступ)
+    ' ========================================
+    ws.Cells(currentRow, 1).Value = "=== ТАБЛИЦА ПРОТОКОЛА ==="
+    ws.Cells(currentRow, 1).Font.Bold = True
+    currentRow = currentRow + 1
+    
+    On Error Resume Next
+    Set tProt = Rastr.Tables("prot")
+    On Error GoTo 0
+    
+    If Not tProt Is Nothing Then
+        If tProt.Count > 0 Then
+            ' Заголовки столбцов (если есть поля)
+            ws.Cells(currentRow, 1).Value = "№"
+            ws.Cells(currentRow, 2).Value = "Сообщение"
+            ws.Cells(currentRow, 3).Value = "Тип"
+            ws.Cells(currentRow, 1).Font.Bold = True
+            ws.Cells(currentRow, 2).Font.Bold = True
+            ws.Cells(currentRow, 3).Font.Bold = True
+            currentRow = currentRow + 1
+            
+            ' Данные из таблицы
+            For i = 0 To tProt.Count - 1
+                ws.Cells(currentRow, 1).Value = i + 1
+                
+                On Error Resume Next
+                ws.Cells(currentRow, 2).Value = tProt.Cols("Message").ZN(i)
+                ws.Cells(currentRow, 3).Value = tProt.Cols("Type").ZN(i)
+                On Error GoTo 0
+                
+                currentRow = currentRow + 1
+            Next
+        Else
+            ws.Cells(currentRow, 1).Value = "(таблица prot пуста)"
+            currentRow = currentRow + 1
+        End If
+    Else
+        ws.Cells(currentRow, 1).Value = "(таблица prot недоступна)"
+        currentRow = currentRow + 1
+    End If
+    
+    ' Форматирование
+    ws.Columns.AutoFit
+    ws.Columns(2).ColumnWidth = 80 ' Увеличить ширину колонки с сообщениями
+    
+    ' Итоговое сообщение
+    MsgBox "Логи успешно экспортированы в Excel!" & vbCrLf & _
+           "Код возврата расчёта: " & nRes & vbCrLf & _
+           "Всего строк: " & (currentRow - 3), vbInformation, "Готово"
+    
+    ' Освобождение объектов
+    Set tProt = Nothing
+    Set spFWDynamic = Nothing
+    Set ws = Nothing
+    Set wb = Nothing
+    Set xl = Nothing
+End Sub
