@@ -1,5 +1,5 @@
-Rastr.FWDynamic.Run()
-
+msg = ""
 For i = 0 To Rastr.Tables.Count - 1
-    Debug.Print Rastr.Tables.Item(i).Name
+    msg = msg & Rastr.Tables.Item(i).Name & vbCrLf
 Next
+MsgBox msg
