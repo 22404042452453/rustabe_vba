@@ -1,15 +1,27 @@
-vb' Список всех таблиц в Excel
+Rastr.FWDynamic.Run()
+
 Set xl = CreateObject("Excel.Application")
 xl.Visible = True
 Set wb = xl.Workbooks.Add
 Set ws = wb.Worksheets(1)
 
-ws.Cells(1, 1).Value = "Таблицы RastrWin"
+ws.Cells(1, 1).Value = "Таблица"
+ws.Cells(1, 2).Value = "Строк"
+ws.Cells(1, 3).Value = "Колонок"
 ws.Cells(1, 1).Font.Bold = True
+ws.Cells(1, 2).Font.Bold = True
+ws.Cells(1, 3).Font.Bold = True
 
+row = 2
 For i = 0 To Rastr.Tables.Count - 1
-    ws.Cells(i + 2, 1).Value = Rastr.Tables.Item(i).Name
+    On Error Resume Next
+    Set t = Rastr.Tables.Item(i)
+    ws.Cells(row, 1).Value = t.Name
+    ws.Cells(row, 2).Value = t.Count
+    ws.Cells(row, 3).Value = t.Cols.Count
+    On Error GoTo 0
+    row = row + 1
 Next
 
 ws.Columns.AutoFit
-MsgBox "Готово! Таблиц: " & Rastr.Tables.Count
+MsgBox "Готово! Всего таблиц: " & Rastr.Tables.Count
