@@ -1,4 +1,27 @@
 Rastr.FWDynamic.Run()
 
-Set t = Rastr.Tables("DFWResultWriteSetup")
-MsgBox "Строк: " & t.Count & vbCrLf & "Колонок: " & t.Cols.Count
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+Set wb = xl.Workbooks.Add
+Set ws = wb.Worksheets(1)
+
+' Проверяем таблицу DoneList
+Set t = Rastr.Tables("DoneList")
+ws.Cells(1, 1).Value = "DoneList - строк: " & t.Count
+ws.Cells(1, 1).Font.Bold = True
+
+' Смотрим колонки
+row = 2
+For j = 0 To t.Cols.Count - 1
+    ws.Cells(row, j + 1).Value = t.Cols(j).Name
+Next
+
+' Данные
+For i = 0 To t.Count - 1
+    row = row + 1
+    For j = 0 To t.Cols.Count - 1
+        ws.Cells(row, j + 1).Value = t.Cols(j).ZN(i)
+    Next
+Next
+
+ws.Columns.AutoFit
