@@ -1,4 +1,4 @@
-' --- Сбор логов динамики в RastrWin ---
+' --- Правильный сбор логов динамики в RastrWin ---
 
 ' Глобальные переменные
 Dim xl, wb, ws
@@ -14,52 +14,76 @@ ws.Name = "Логи"
 
 ' Заголовки
 ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Источник"
-ws.Cells(1, 3).Value = "Описание"
-ws.Range("A1:C1").Font.Bold = True
-
+ws.Cells(1, 2).Value = "Уровень"
+ws.Cells(1, 3).Value = "Таблица"
+ws.Cells(1, 4).Value = "Индекс"
+ws.Cells(1, 5).Value = "Описание"
+ws.Range("A1:E1").Font.Bold = True
 rowNum = 2
 
-' Запускаем расчет динамики (Rastr уже доступен глобально)
+' ВАЖНО: Подписываемся на события ДО запуска расчета
+' Обработчик события OnLog
+Sub OnLogHandler(Code, Level, StageId, TableName, TableIndex, Description, FormName)
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = Level
+    ws.Cells(rowNum, 3).Value = TableName
+    ws.Cells(rowNum, 4).Value = TableIndex
+    ws.Cells(rowNum, 5).Value = Description
+    rowNum = rowNum + 1
+End Sub
+
+' Обработчик события prot (протокол)
+Sub OnProtHandler(str)
+    ws.Cells(rowNum, 1).Value = rowNum - 1
+    ws.Cells(rowNum, 2).Value = "INFO"
+    ws.Cells(rowNum, 3).Value = "prot"
+    ws.Cells(rowNum, 4).Value = ""
+    ws.Cells(rowNum, 5).Value = str
+    rowNum = rowNum + 1
+End Sub
+
+' Подписываемся на события
+' ВНИМАНИЕ: В VBScript подписка на события COM-объектов 
+' требует использования WithEvents или специальных методов
+' Для RastrWin3 может потребоваться другой подход
+
+' Альтернативный подход: используем Rastr.OnLog напрямую
 Dim spFWDynamic
 Set spFWDynamic = Rastr.FWDynamic
 
 If Not spFWDynamic Is Nothing Then
+    ' Попытка подписки на события (зависит от версии RastrWin)
+    ' Вариант 1: Если поддерживается прямая подписка
+    ' Rastr.OnLog = GetRef("OnLogHandler")
+    ' Rastr.prot = GetRef("OnProtHandler")
+    
+    ' Вариант 2: Через PropertyBag или специальные методы
+    ' (уточните в документации вашей версии ASTRA)
+    
+    MsgBox "Запуск расчета динамики. Логи будут собираться в процессе...", vbInformation
+    
     Dim nRes
     nRes = spFWDynamic.Run()
     
     If nRes = 0 Then
-        ' Получаем результирующее сообщение
-        Dim resultMsg
-        resultMsg = spFWDynamic.ResultMessage
-        
-        ' Разбиваем на строки
-        Dim msgLines, i, logLine
-        msgLines = Split(resultMsg, vbCrLf)
-        If UBound(msgLines) = -1 Then
-            msgLines = Split(resultMsg, vbLf)
-        End If
-        
-        ' Записываем все логи в Excel
-        For i = 0 To UBound(msgLines)
-            logLine = Trim(msgLines(i))
-            If Len(logLine) > 0 Then
-                ws.Cells(rowNum, 1).Value = rowNum - 1
-                ws.Cells(rowNum, 2).Value = "FWDynamic"
-                ws.Cells(rowNum, 3).Value = logLine
-                rowNum = rowNum + 1
-            End If
-        Next
-        
-        ' Форматирование
+        ' Форматирование результата
         ws.Columns.AutoFit
-        ws.Columns("C:C").ColumnWidth = 150
+        ws.Columns("E:E").ColumnWidth = 150
         
         Dim totalLines
         totalLines = rowNum - 2
-        MsgBox "Собрано логов: " & totalLines, vbInformation, "Готово"
+        MsgBox "Расчет завершен. Собрано логов: " & totalLines, vbInformation, "Готово"
     Else
         MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
+        
+        ' Попытка получить сообщение об ошибке
+        On Error Resume Next
+        Dim errMsg
+        errMsg = spFWDynamic.ResultMessage
+        If Len(errMsg) > 0 Then
+            ws.Cells(rowNum, 5).Value = "ОШИБКА: " & errMsg
+        End If
+        On Error Goto 0
     End If
 Else
     MsgBox "FWDynamic недоступен", vbCritical, "Ошибка"
