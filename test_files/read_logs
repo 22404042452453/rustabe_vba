@@ -1,220 +1,187 @@
-' ====================================================================
-' Скрипт для настройки логирования и обработки логов ASTRA
-' ====================================================================
+' ============================================================================
+' Макрос для RastrWin: Обработка файла логов и экспорт в Excel
+' ============================================================================
 
-Option Explicit
+' --- НАСТРОЙКИ ---
+logFilePath = "D:\Vms\SHARA\crosses\динамика.log"  ' Путь к файлу логов
+excelSavePath = ""  ' Пустая строка = автоматическое имя
 
-' --- ЧАСТЬ 1: Настройка и запуск расчета с логированием ---
-Sub SetupAndRunCalculation()
-    Dim logFilePath
-    Dim spFWDynamic
-    Dim nRes
+' --- КОД ---
+Set fso = CreateObject("Scripting.FileSystemObject")
+
+' Проверка файла
+If Not fso.FileExists(logFilePath) Then
+    MsgBox "Файл логов не найден: " & vbCrLf & logFilePath, vbCritical, "Ошибка"
+    WScript.Quit
+End If
+
+' Создание Excel
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+xl.DisplayAlerts = False
+Set wb = xl.Workbooks.Add
+Set ws = wb.Worksheets(1)
+ws.Name = "Логи ASTRA"
+
+' Заголовки
+ws.Cells(1, 1).Value = "№"
+ws.Cells(1, 2).Value = "Время"
+ws.Cells(1, 3).Value = "Тип"
+ws.Cells(1, 4).Value = "Сообщение"
+ws.Range("A1:D1").Font.Bold = True
+ws.Range("A1:D1").Interior.Color = RGB(200, 200, 200)
+
+rowNum = 2
+totalLines = 0
+processedLines = 0
+
+' Чтение файла
+Set logFile = fso.OpenTextFile(logFilePath, 1, False, -1)
+
+Do Until logFile.AtEndOfStream
+    line = logFile.ReadLine
+    totalLines = totalLines + 1
     
-    ' Путь к файлу логов (в папке с RastrWin или указать свой путь)
-    logFilePath = "C:\ASTRA_Logs\dynamic_calc_log.txt"
-    
-    ' Создаем папку для логов, если её нет
-    CreateFolder("C:\ASTRA_Logs")
-    
-    ' Удаляем старый лог, если существует
-    DeleteFileIfExists(logFilePath)
-    
-    MsgBox "Логи будут сохранены в файл:" & vbCrLf & logFilePath, vbInformation
-    
-    ' Включаем логирование в файл (если поддерживается вашей версией ASTRA)
-    ' Проверьте документацию - может быть метод SetLogFile, EnableFileLogging и т.п.
-    On Error Resume Next
-    Rastr.LogFile = logFilePath
-    If Err.Number <> 0 Then
-        ' Если прямого метода нет, используем перенаправление вывода
-        Rastr.prot_file = logFilePath  ' Попытка через prot_file
-    End If
-    On Error Goto 0
-    
-    ' Получаем интерфейс динамики
-    Set spFWDynamic = Rastr.FWDynamic
-    
-    If Not spFWDynamic Is Nothing Then
-        MsgBox "Начинаем расчет динамики..." & vbCrLf & "Это может занять время.", vbInformation
+    If Len(Trim(line)) > 0 Then
+        lineTime = ""
+        lineType = "INFO"
+        lineMessage = line
         
-        ' Запускаем расчет
-        nRes = spFWDynamic.Run()
-        
-        If nRes = 0 Then
-            MsgBox "Расчет завершен успешно!" & vbCrLf & vbCrLf & _
-                   "Теперь запустите функцию ProcessLogFile для анализа логов.", vbInformation
-        Else
-            MsgBox "Ошибка расчета (код: " & nRes & ")", vbExclamation
+        ' Парсинг строки с разделителем |
+        If InStr(line, "|") > 0 Then
+            parts = Split(line, "|")
+            If UBound(parts) >= 2 Then
+                lineTime = Trim(parts(0))
+                lineType = Trim(parts(1))
+                lineMessage = Trim(parts(2))
+            ElseIf UBound(parts) = 1 Then
+                lineType = Trim(parts(0))
+                lineMessage = Trim(parts(1))
+            End If
+        ElseIf InStr(line, ":") > 0 And Len(line) < 100 Then
+            colonPos = InStr(line, ":")
+            beforeColon = Trim(Left(line, colonPos - 1))
+            lineMessage = Trim(Mid(line, colonPos + 1))
+            
+            If InStr(beforeColon, " ") > 0 Then
+                spaceParts = Split(beforeColon, " ")
+                lineTime = spaceParts(0)
+                If UBound(spaceParts) >= 1 Then
+                    lineType = spaceParts(UBound(spaceParts))
+                End If
+            Else
+                lineType = beforeColon
+            End If
         End If
         
-        ' Закрываем файл логов
-        On Error Resume Next
-        Rastr.LogFile = ""
-        Rastr.prot_file = ""
-        On Error Goto 0
-    Else
-        MsgBox "FWDynamic недоступен", vbCritical
-    End If
-End Sub
-
-' --- ЧАСТЬ 2: Обработка файла логов и экспорт в Excel ---
-Sub ProcessLogFile()
-    Dim fso, logFile, logFilePath
-    Dim xl, wb, ws
-    Dim rowNum, line
-    Dim totalLines
-    
-    ' Путь к файлу логов
-    logFilePath = "C:\ASTRA_Logs\dynamic_calc_log.txt"
-    
-    ' Проверяем существование файла
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    If Not fso.FileExists(logFilePath) Then
-        MsgBox "Файл логов не найден:" & vbCrLf & logFilePath & vbCrLf & vbCrLf & _
-               "Сначала запустите расчет с функцией SetupAndRunCalculation", vbExclamation
-        Exit Sub
-    End If
-    
-    ' Создаем Excel
-    Set xl = CreateObject("Excel.Application")
-    xl.Visible = True
-    xl.DisplayAlerts = False
-    Set wb = xl.Workbooks.Add
-    Set ws = wb.Worksheets(1)
-    ws.Name = "Логи ASTRA"
-    
-    ' Заголовки
-    ws.Cells(1, 1).Value = "№"
-    ws.Cells(1, 2).Value = "Тип"
-    ws.Cells(1, 3).Value = "Сообщение"
-    ws.Range("A1:C1").Font.Bold = True
-    ws.Range("A1:C1").Interior.Color = RGB(200, 200, 200)
-    
-    rowNum = 2
-    totalLines = 0
-    
-    ' Открываем и читаем файл логов
-    Set logFile = fso.OpenTextFile(logFilePath, 1, False)
-    
-    Do While Not logFile.AtEndOfStream
-        line = logFile.ReadLine
-        line = Trim(line)
-        
-        ' Пропускаем пустые строки
-        If Len(line) > 0 Then
-            ws.Cells(rowNum, 1).Value = totalLines + 1
-            
-            ' Определяем тип сообщения по ключевым словам
-            Dim msgType
-            msgType = GetMessageType(line)
-            ws.Cells(rowNum, 2).Value = msgType
-            
-            ' Раскрашиваем строки по типу
-            Select Case msgType
-                Case "ERROR", "ОШИБКА"
-                    ws.Range("A" & rowNum & ":C" & rowNum).Interior.Color = RGB(255, 200, 200)
-                Case "WARNING", "ПРЕДУПРЕЖДЕНИЕ"
-                    ws.Range("A" & rowNum & ":C" & rowNum).Interior.Color = RGB(255, 255, 200)
-                Case "SUCCESS", "УСПЕХ"
-                    ws.Range("A" & rowNum & ":C" & rowNum).Interior.Color = RGB(200, 255, 200)
-            End Select
-            
-            ' Само сообщение
-            ws.Cells(rowNum, 3).Value = line
-            
-            rowNum = rowNum + 1
-            totalLines = totalLines + 1
+        ' Определение типа по ключевым словам
+        If lineType = "INFO" Or lineType = "" Then
+            If InStr(1, line, "ERROR", 1) > 0 Or InStr(1, line, "ОШИБКА", 1) > 0 Then
+                lineType = "ERROR"
+            ElseIf InStr(1, line, "WARNING", 1) > 0 Or InStr(1, line, "ВНИМАНИЕ", 1) > 0 Then
+                lineType = "WARNING"
+            ElseIf InStr(1, line, "CRITICAL", 1) > 0 Or InStr(1, line, "КРИТИЧЕСКАЯ", 1) > 0 Then
+                lineType = "CRITICAL"
+            End If
         End If
-    Loop
-    
-    logFile.Close
-    
-    ' Форматирование
-    ws.Columns("A:A").ColumnWidth = 8
-    ws.Columns("B:B").ColumnWidth = 20
-    ws.Columns("C:C").ColumnWidth = 120
-    ws.Columns("C:C").WrapText = True
-    
-    ' Добавляем фильтры
-    ws.Range("A1:C" & (rowNum - 1)).AutoFilter
-    
-    ' Закрепляем первую строку
-    ws.Range("A2").Select
-    xl.ActiveWindow.FreezePanes = True
-    
-    ' Статистика
-    Dim statsRow
-    statsRow = rowNum + 2
-    ws.Cells(statsRow, 1).Value = "Статистика:"
-    ws.Cells(statsRow, 1).Font.Bold = True
-    ws.Cells(statsRow + 1, 1).Value = "Всего строк:"
-    ws.Cells(statsRow + 1, 2).Value = totalLines
-    
-    ' Подсчитываем количество ошибок и предупреждений
-    Dim errCount, warnCount, i
-    errCount = 0
-    warnCount = 0
-    For i = 2 To rowNum - 1
-        Select Case ws.Cells(i, 2).Value
-            Case "ERROR", "ОШИБКА"
-                errCount = errCount + 1
-            Case "WARNING", "ПРЕДУПРЕЖДЕНИЕ"
-                warnCount = warnCount + 1
-        End Select
-    Next
-    
-    ws.Cells(statsRow + 2, 1).Value = "Ошибок:"
-    ws.Cells(statsRow + 2, 2).Value = errCount
-    ws.Cells(statsRow + 2, 2).Font.Color = RGB(255, 0, 0)
-    
-    ws.Cells(statsRow + 3, 1).Value = "Предупреждений:"
-    ws.Cells(statsRow + 3, 2).Value = warnCount
-    ws.Cells(statsRow + 3, 2).Font.Color = RGB(255, 128, 0)
-    
-    ws.Range("A1").Select
-    
-    MsgBox "Обработка завершена!" & vbCrLf & vbCrLf & _
-           "Всего строк: " & totalLines & vbCrLf & _
-           "Ошибок: " & errCount & vbCrLf & _
-           "Предупреждений: " & warnCount, vbInformation, "Готово"
-End Sub
+        
+        ' Запись в Excel
+        ws.Cells(rowNum, 1).Value = processedLines + 1
+        ws.Cells(rowNum, 2).Value = lineTime
+        ws.Cells(rowNum, 3).Value = lineType
+        ws.Cells(rowNum, 4).Value = lineMessage
+        
+        ' Цветовая подсветка
+        If UCase(lineType) = "ERROR" Or UCase(lineType) = "ОШИБКА" Then
+            ws.Cells(rowNum, 3).Interior.Color = RGB(255, 200, 200)
+            ws.Cells(rowNum, 3).Font.Color = RGB(200, 0, 0)
+        ElseIf UCase(lineType) = "WARNING" Or UCase(lineType) = "ВНИМАНИЕ" Then
+            ws.Cells(rowNum, 3).Interior.Color = RGB(255, 255, 200)
+            ws.Cells(rowNum, 3).Font.Color = RGB(200, 100, 0)
+        ElseIf UCase(lineType) = "CRITICAL" Or UCase(lineType) = "КРИТИЧЕСКАЯ" Then
+            ws.Cells(rowNum, 3).Interior.Color = RGB(255, 150, 150)
+            ws.Cells(rowNum, 3).Font.Color = RGB(150, 0, 0)
+            ws.Cells(rowNum, 3).Font.Bold = True
+        End If
+        
+        rowNum = rowNum + 1
+        processedLines = processedLines + 1
+    End If
+Loop
 
-' --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+logFile.Close
 
-' Определение типа сообщения
-Function GetMessageType(line)
-    Dim upperLine
-    upperLine = UCase(line)
-    
-    If InStr(upperLine, "ERROR") > 0 Or InStr(upperLine, "ОШИБКА") > 0 Or InStr(upperLine, "FAILED") > 0 Then
-        GetMessageType = "ERROR"
-    ElseIf InStr(upperLine, "WARNING") > 0 Or InStr(upperLine, "ПРЕДУПРЕЖДЕНИЕ") > 0 Or InStr(upperLine, "WARN") > 0 Then
-        GetMessageType = "WARNING"
-    ElseIf InStr(upperLine, "SUCCESS") > 0 Or InStr(upperLine, "УСПЕХ") > 0 Or InStr(upperLine, "COMPLETED") > 0 Then
-        GetMessageType = "SUCCESS"
-    ElseIf InStr(upperLine, "START") > 0 Or InStr(upperLine, "BEGIN") > 0 Or InStr(upperLine, "НАЧАЛО") > 0 Then
-        GetMessageType = "START"
-    ElseIf InStr(upperLine, "END") > 0 Or InStr(upperLine, "FINISH") > 0 Or InStr(upperLine, "КОНЕЦ") > 0 Then
-        GetMessageType = "END"
+' Форматирование
+ws.Columns("A:A").ColumnWidth = 6
+ws.Columns("B:B").ColumnWidth = 12
+ws.Columns("C:C").ColumnWidth = 12
+ws.Columns("D:D").ColumnWidth = 120
+ws.Columns("D:D").WrapText = True
+ws.Range("A1:D1").AutoFilter
+
+' Статистика
+errorCount = 0
+warningCount = 0
+infoCount = 0
+
+For i = 2 To rowNum - 1
+    cellType = UCase(ws.Cells(i, 3).Value)
+    If cellType = "ERROR" Or cellType = "ОШИБКА" Then
+        errorCount = errorCount + 1
+    ElseIf cellType = "WARNING" Or cellType = "ВНИМАНИЕ" Then
+        warningCount = warningCount + 1
     Else
-        GetMessageType = "INFO"
+        infoCount = infoCount + 1
     End If
-End Function
+Next
 
-' Создание папки
-Sub CreateFolder(folderPath)
-    Dim fso
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    If Not fso.FolderExists(folderPath) Then
-        fso.CreateFolder(folderPath)
-    End If
-End Sub
+' Лист статистики
+Set wsStats = wb.Worksheets.Add
+wsStats.Name = "Статистика"
 
-' Удаление файла
-Sub DeleteFileIfExists(filePath)
-    Dim fso
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    If fso.FileExists(filePath) Then
-        fso.DeleteFile(filePath)
-    End If
-End Sub
+wsStats.Cells(1, 1).Value = "Статистика логов"
+wsStats.Cells(1, 1).Font.Bold = True
+wsStats.Cells(1, 1).Font.Size = 14
+
+wsStats.Cells(3, 1).Value = "Файл логов:"
+wsStats.Cells(3, 2).Value = logFilePath
+
+wsStats.Cells(5, 1).Value = "Всего строк:"
+wsStats.Cells(5, 2).Value = totalLines
+
+wsStats.Cells(6, 1).Value = "Обработано:"
+wsStats.Cells(6, 2).Value = processedLines
+
+wsStats.Cells(8, 1).Value = "Тип"
+wsStats.Cells(8, 2).Value = "Количество"
+wsStats.Cells(8, 1).Font.Bold = True
+wsStats.Cells(8, 2).Font.Bold = True
+
+wsStats.Cells(9, 1).Value = "INFO"
+wsStats.Cells(9, 2).Value = infoCount
+
+wsStats.Cells(10, 1).Value = "WARNING"
+wsStats.Cells(10, 2).Value = warningCount
+wsStats.Cells(10, 1).Interior.Color = RGB(255, 255, 200)
+
+wsStats.Cells(11, 1).Value = "ERROR"
+wsStats.Cells(11, 2).Value = errorCount
+wsStats.Cells(11, 1).Interior.Color = RGB(255, 200, 200)
+
+wsStats.Columns.AutoFit
+
+' Сохранение
+If excelSavePath = "" Then
+    excelSavePath = fso.GetParentFolderName(logFilePath) & "\" & fso.GetBaseName(logFilePath) & "_анализ.xlsx"
+End If
+
+wb.SaveAs excelSavePath
+
+MsgBox "Готово!" & vbCrLf & vbCrLf & _
+       "Обработано: " & processedLines & vbCrLf & _
+       "INFO: " & infoCount & vbCrLf & _
+       "WARNING: " & warningCount & vbCrLf & _
+       "ERROR: " & errorCount & vbCrLf & vbCrLf & _
+       "Файл: " & excelSavePath, vbInformation, "Готово"
+
+wsStats.Activate
