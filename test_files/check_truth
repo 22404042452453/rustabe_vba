@@ -394,16 +394,18 @@ Sub CheckGenerators(errors, warnings, errorCount, warnCount)
         ' Получаем коэффициент демпфирования D
         dCoef = t.Cols("D").Z(i)
         
-        ' Пытаемся определить, используется ли модель Парко-Горева
-        ' Проверяем наличие характерных параметров
-        xd = t.Cols("Xd").Z(i)
-        xdPrime = t.Cols("Xd'").Z(i)
-        xdDoublePrime = t.Cols("Xd''").Z(i)
-        xq = t.Cols("Xq").Z(i)
+        ' Определяем, используется ли модель Парко-Горева
+        ' Проверяем параметры: xd, xq, xd2, xq2, td01
+        Dim xd, xq, xd2, xq2, td01
+        xd = t.Cols("xd").Z(i)
+        xq = t.Cols("xq").Z(i)
+        xd2 = t.Cols("xd2").Z(i)
+        xq2 = t.Cols("xq2").Z(i)
+        td01 = t.Cols("td01").Z(i)
         
-        ' Если заданы реактивности по осям d и q, считаем что используется Парко-Горева
+        ' Если ВСЕ параметры Парко-Горева > 0, то модель используется
         usesParkGoreva = False
-        If (xd > 0 Or xdPrime > 0 Or xdDoublePrime > 0 Or xq > 0) Then
+        If (xd > 0 And xq > 0 And xd2 > 0 And xq2 > 0 And td01 > 0) Then
             usesParkGoreva = True
         End If
         
@@ -478,45 +480,6 @@ Sub CheckGenerators(errors, warnings, errorCount, warnCount)
             End If
         End If
         
-    Next
-    
-    On Error GoTo 0
-End Sub
-
-' ============================================================
-' Проверка топологии
-' ============================================================
-Sub CheckTopology(errors, warnings, errorCount, warnCount)
-    On Error Resume Next
-    
-    Dim tNode, tVetv, i, j, ny, ip, iq, sta, isConnected, nodeName
-    
-    Set tNode = Rastr.Tables("node")
-    Set tVetv = Rastr.Tables("vetv")
-    If tNode Is Nothing Or tVetv Is Nothing Then Exit Sub
-    
-    For i = 0 To tNode.Count - 1
-        ny = tNode.Cols("ny").Z(i)
-        nodeName = tNode.Cols("name").Z(i)
-        
-        isConnected = False
-        
-        For j = 0 To tVetv.Count - 1
-            ip = tVetv.Cols("ip").Z(j)
-            iq = tVetv.Cols("iq").Z(j)
-            sta = tVetv.Cols("sta").Z(j)
-            
-            If sta = 0 And (ip = ny Or iq = ny) Then
-                isConnected = True
-                Exit For
-            End If
-        Next
-        
-        If Not isConnected Then
-            warnings = warnings & "Узел " & ny & " (" & nodeName & "): " & _
-                      "Изолирован (нет подключенных ветвей)" & vbCrLf
-            warnCount = warnCount + 1
-        End If
     Next
     
     On Error GoTo 0
