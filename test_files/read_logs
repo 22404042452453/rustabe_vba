@@ -1,187 +1,34 @@
-' ============================================================================
-' Макрос для RastrWin: Обработка файла логов и экспорт в Excel
-' ============================================================================
+' Самый простой вариант - прямое получение логов
 
-' --- НАСТРОЙКИ ---
-logFilePath = "D:\Vms\SHARA\crosses\динамика.log"  ' Путь к файлу логов
-excelSavePath = ""  ' Пустая строка = автоматическое имя
-
-' --- КОД ---
-Set fso = CreateObject("Scripting.FileSystemObject")
-
-' Проверка файла
-If Not fso.FileExists(logFilePath) Then
-    MsgBox "Файл логов не найден: " & vbCrLf & logFilePath, vbCritical, "Ошибка"
-    WScript.Quit
-End If
-
-' Создание Excel
 Set xl = CreateObject("Excel.Application")
 xl.Visible = True
-xl.DisplayAlerts = False
 Set wb = xl.Workbooks.Add
 Set ws = wb.Worksheets(1)
-ws.Name = "Логи ASTRA"
 
-' Заголовки
-ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Время"
-ws.Cells(1, 3).Value = "Тип"
-ws.Cells(1, 4).Value = "Сообщение"
-ws.Range("A1:D1").Font.Bold = True
-ws.Range("A1:D1").Interior.Color = RGB(200, 200, 200)
+ws.Cells(1, 1).Value = "Логи динамики"
+ws.Cells(1, 1).Font.Bold = True
 
-rowNum = 2
-totalLines = 0
-processedLines = 0
+Set spFWDynamic = Rastr.FWDynamic
+nRes = spFWDynamic.Run()
 
-' Чтение файла
-Set logFile = fso.OpenTextFile(logFilePath, 1, False, -1)
-
-Do Until logFile.AtEndOfStream
-    line = logFile.ReadLine
-    totalLines = totalLines + 1
-    
-    If Len(Trim(line)) > 0 Then
-        lineTime = ""
-        lineType = "INFO"
-        lineMessage = line
-        
-        ' Парсинг строки с разделителем |
-        If InStr(line, "|") > 0 Then
-            parts = Split(line, "|")
-            If UBound(parts) >= 2 Then
-                lineTime = Trim(parts(0))
-                lineType = Trim(parts(1))
-                lineMessage = Trim(parts(2))
-            ElseIf UBound(parts) = 1 Then
-                lineType = Trim(parts(0))
-                lineMessage = Trim(parts(1))
-            End If
-        ElseIf InStr(line, ":") > 0 And Len(line) < 100 Then
-            colonPos = InStr(line, ":")
-            beforeColon = Trim(Left(line, colonPos - 1))
-            lineMessage = Trim(Mid(line, colonPos + 1))
-            
-            If InStr(beforeColon, " ") > 0 Then
-                spaceParts = Split(beforeColon, " ")
-                lineTime = spaceParts(0)
-                If UBound(spaceParts) >= 1 Then
-                    lineType = spaceParts(UBound(spaceParts))
-                End If
-            Else
-                lineType = beforeColon
-            End If
-        End If
-        
-        ' Определение типа по ключевым словам
-        If lineType = "INFO" Or lineType = "" Then
-            If InStr(1, line, "ERROR", 1) > 0 Or InStr(1, line, "ОШИБКА", 1) > 0 Then
-                lineType = "ERROR"
-            ElseIf InStr(1, line, "WARNING", 1) > 0 Or InStr(1, line, "ВНИМАНИЕ", 1) > 0 Then
-                lineType = "WARNING"
-            ElseIf InStr(1, line, "CRITICAL", 1) > 0 Or InStr(1, line, "КРИТИЧЕСКАЯ", 1) > 0 Then
-                lineType = "CRITICAL"
-            End If
-        End If
-        
-        ' Запись в Excel
-        ws.Cells(rowNum, 1).Value = processedLines + 1
-        ws.Cells(rowNum, 2).Value = lineTime
-        ws.Cells(rowNum, 3).Value = lineType
-        ws.Cells(rowNum, 4).Value = lineMessage
-        
-        ' Цветовая подсветка
-        If UCase(lineType) = "ERROR" Or UCase(lineType) = "ОШИБКА" Then
-            ws.Cells(rowNum, 3).Interior.Color = RGB(255, 200, 200)
-            ws.Cells(rowNum, 3).Font.Color = RGB(200, 0, 0)
-        ElseIf UCase(lineType) = "WARNING" Or UCase(lineType) = "ВНИМАНИЕ" Then
-            ws.Cells(rowNum, 3).Interior.Color = RGB(255, 255, 200)
-            ws.Cells(rowNum, 3).Font.Color = RGB(200, 100, 0)
-        ElseIf UCase(lineType) = "CRITICAL" Or UCase(lineType) = "КРИТИЧЕСКАЯ" Then
-            ws.Cells(rowNum, 3).Interior.Color = RGB(255, 150, 150)
-            ws.Cells(rowNum, 3).Font.Color = RGB(150, 0, 0)
-            ws.Cells(rowNum, 3).Font.Bold = True
-        End If
-        
-        rowNum = rowNum + 1
-        processedLines = processedLines + 1
-    End If
-Loop
-
-logFile.Close
-
-' Форматирование
-ws.Columns("A:A").ColumnWidth = 6
-ws.Columns("B:B").ColumnWidth = 12
-ws.Columns("C:C").ColumnWidth = 12
-ws.Columns("D:D").ColumnWidth = 120
-ws.Columns("D:D").WrapText = True
-ws.Range("A1:D1").AutoFilter
-
-' Статистика
-errorCount = 0
-warningCount = 0
-infoCount = 0
-
-For i = 2 To rowNum - 1
-    cellType = UCase(ws.Cells(i, 3).Value)
-    If cellType = "ERROR" Or cellType = "ОШИБКА" Then
-        errorCount = errorCount + 1
-    ElseIf cellType = "WARNING" Or cellType = "ВНИМАНИЕ" Then
-        warningCount = warningCount + 1
-    Else
-        infoCount = infoCount + 1
-    End If
-Next
-
-' Лист статистики
-Set wsStats = wb.Worksheets.Add
-wsStats.Name = "Статистика"
-
-wsStats.Cells(1, 1).Value = "Статистика логов"
-wsStats.Cells(1, 1).Font.Bold = True
-wsStats.Cells(1, 1).Font.Size = 14
-
-wsStats.Cells(3, 1).Value = "Файл логов:"
-wsStats.Cells(3, 2).Value = logFilePath
-
-wsStats.Cells(5, 1).Value = "Всего строк:"
-wsStats.Cells(5, 2).Value = totalLines
-
-wsStats.Cells(6, 1).Value = "Обработано:"
-wsStats.Cells(6, 2).Value = processedLines
-
-wsStats.Cells(8, 1).Value = "Тип"
-wsStats.Cells(8, 2).Value = "Количество"
-wsStats.Cells(8, 1).Font.Bold = True
-wsStats.Cells(8, 2).Font.Bold = True
-
-wsStats.Cells(9, 1).Value = "INFO"
-wsStats.Cells(9, 2).Value = infoCount
-
-wsStats.Cells(10, 1).Value = "WARNING"
-wsStats.Cells(10, 2).Value = warningCount
-wsStats.Cells(10, 1).Interior.Color = RGB(255, 255, 200)
-
-wsStats.Cells(11, 1).Value = "ERROR"
-wsStats.Cells(11, 2).Value = errorCount
-wsStats.Cells(11, 1).Interior.Color = RGB(255, 200, 200)
-
-wsStats.Columns.AutoFit
-
-' Сохранение
-If excelSavePath = "" Then
-    excelSavePath = fso.GetParentFolderName(logFilePath) & "\" & fso.GetBaseName(logFilePath) & "_анализ.xlsx"
+' ВАРИАНТ 1: Через ResultMessage
+resultMsg = spFWDynamic.ResultMessage
+If Len(resultMsg) > 0 Then
+    lines = Split(resultMsg, vbCrLf)
+    For i = 0 To UBound(lines)
+        ws.Cells(i + 2, 1).Value = lines(i)
+    Next
 End If
 
-wb.SaveAs excelSavePath
+' ВАРИАНТ 2: Через Protocol (если есть)
+' protocol = spFWDynamic.Protocol
+' ws.Cells(2, 1).Value = protocol
 
-MsgBox "Готово!" & vbCrLf & vbCrLf & _
-       "Обработано: " & processedLines & vbCrLf & _
-       "INFO: " & infoCount & vbCrLf & _
-       "WARNING: " & warningCount & vbCrLf & _
-       "ERROR: " & errorCount & vbCrLf & vbCrLf & _
-       "Файл: " & excelSavePath, vbInformation, "Готово"
+' ВАРИАНТ 3: Через таблицу prot
+' Set tProt = Rastr.Tables("prot")
+' For i = 0 To tProt.Count - 1
+'     ws.Cells(i + 2, 1).Value = tProt.Cols("Message").ZN(i)
+' Next
 
-wsStats.Activate
+ws.Columns.AutoFit
+MsgBox "Готово! Код возврата: " & nRes, vbInformation
