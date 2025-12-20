@@ -1,90 +1,220 @@
-' --- Правильный сбор логов динамики в RastrWin ---
+' ====================================================================
+' Скрипт для настройки логирования и обработки логов ASTRA
+' ====================================================================
 
-' Глобальные переменные
-Dim xl, wb, ws
-Dim rowNum
+Option Explicit
 
-' Инициализация Excel
-Set xl = CreateObject("Excel.Application")
-xl.Visible = True
-xl.DisplayAlerts = False
-Set wb = xl.Workbooks.Add
-Set ws = wb.Worksheets(1)
-ws.Name = "Логи"
-
-' Заголовки
-ws.Cells(1, 1).Value = "№"
-ws.Cells(1, 2).Value = "Уровень"
-ws.Cells(1, 3).Value = "Таблица"
-ws.Cells(1, 4).Value = "Индекс"
-ws.Cells(1, 5).Value = "Описание"
-ws.Range("A1:E1").Font.Bold = True
-rowNum = 2
-
-' ВАЖНО: Подписываемся на события ДО запуска расчета
-' Обработчик события OnLog
-Sub OnLogHandler(Code, Level, StageId, TableName, TableIndex, Description, FormName)
-    ws.Cells(rowNum, 1).Value = rowNum - 1
-    ws.Cells(rowNum, 2).Value = Level
-    ws.Cells(rowNum, 3).Value = TableName
-    ws.Cells(rowNum, 4).Value = TableIndex
-    ws.Cells(rowNum, 5).Value = Description
-    rowNum = rowNum + 1
-End Sub
-
-' Обработчик события prot (протокол)
-Sub OnProtHandler(str)
-    ws.Cells(rowNum, 1).Value = rowNum - 1
-    ws.Cells(rowNum, 2).Value = "INFO"
-    ws.Cells(rowNum, 3).Value = "prot"
-    ws.Cells(rowNum, 4).Value = ""
-    ws.Cells(rowNum, 5).Value = str
-    rowNum = rowNum + 1
-End Sub
-
-' Подписываемся на события
-' ВНИМАНИЕ: В VBScript подписка на события COM-объектов 
-' требует использования WithEvents или специальных методов
-' Для RastrWin3 может потребоваться другой подход
-
-' Альтернативный подход: используем Rastr.OnLog напрямую
-Dim spFWDynamic
-Set spFWDynamic = Rastr.FWDynamic
-
-If Not spFWDynamic Is Nothing Then
-    ' Попытка подписки на события (зависит от версии RastrWin)
-    ' Вариант 1: Если поддерживается прямая подписка
-    ' Rastr.OnLog = GetRef("OnLogHandler")
-    ' Rastr.prot = GetRef("OnProtHandler")
-    
-    ' Вариант 2: Через PropertyBag или специальные методы
-    ' (уточните в документации вашей версии ASTRA)
-    
-    MsgBox "Запуск расчета динамики. Логи будут собираться в процессе...", vbInformation
-    
+' --- ЧАСТЬ 1: Настройка и запуск расчета с логированием ---
+Sub SetupAndRunCalculation()
+    Dim logFilePath
+    Dim spFWDynamic
     Dim nRes
-    nRes = spFWDynamic.Run()
     
-    If nRes = 0 Then
-        ' Форматирование результата
-        ws.Columns.AutoFit
-        ws.Columns("E:E").ColumnWidth = 150
-        
-        Dim totalLines
-        totalLines = rowNum - 2
-        MsgBox "Расчет завершен. Собрано логов: " & totalLines, vbInformation, "Готово"
-    Else
-        MsgBox "Ошибка расчета FWDynamic (код: " & nRes & ")", vbExclamation, "Ошибка"
-        
-        ' Попытка получить сообщение об ошибке
-        On Error Resume Next
-        Dim errMsg
-        errMsg = spFWDynamic.ResultMessage
-        If Len(errMsg) > 0 Then
-            ws.Cells(rowNum, 5).Value = "ОШИБКА: " & errMsg
-        End If
-        On Error Goto 0
+    ' Путь к файлу логов (в папке с RastrWin или указать свой путь)
+    logFilePath = "C:\ASTRA_Logs\dynamic_calc_log.txt"
+    
+    ' Создаем папку для логов, если её нет
+    CreateFolder("C:\ASTRA_Logs")
+    
+    ' Удаляем старый лог, если существует
+    DeleteFileIfExists(logFilePath)
+    
+    MsgBox "Логи будут сохранены в файл:" & vbCrLf & logFilePath, vbInformation
+    
+    ' Включаем логирование в файл (если поддерживается вашей версией ASTRA)
+    ' Проверьте документацию - может быть метод SetLogFile, EnableFileLogging и т.п.
+    On Error Resume Next
+    Rastr.LogFile = logFilePath
+    If Err.Number <> 0 Then
+        ' Если прямого метода нет, используем перенаправление вывода
+        Rastr.prot_file = logFilePath  ' Попытка через prot_file
     End If
-Else
-    MsgBox "FWDynamic недоступен", vbCritical, "Ошибка"
-End If
+    On Error Goto 0
+    
+    ' Получаем интерфейс динамики
+    Set spFWDynamic = Rastr.FWDynamic
+    
+    If Not spFWDynamic Is Nothing Then
+        MsgBox "Начинаем расчет динамики..." & vbCrLf & "Это может занять время.", vbInformation
+        
+        ' Запускаем расчет
+        nRes = spFWDynamic.Run()
+        
+        If nRes = 0 Then
+            MsgBox "Расчет завершен успешно!" & vbCrLf & vbCrLf & _
+                   "Теперь запустите функцию ProcessLogFile для анализа логов.", vbInformation
+        Else
+            MsgBox "Ошибка расчета (код: " & nRes & ")", vbExclamation
+        End If
+        
+        ' Закрываем файл логов
+        On Error Resume Next
+        Rastr.LogFile = ""
+        Rastr.prot_file = ""
+        On Error Goto 0
+    Else
+        MsgBox "FWDynamic недоступен", vbCritical
+    End If
+End Sub
+
+' --- ЧАСТЬ 2: Обработка файла логов и экспорт в Excel ---
+Sub ProcessLogFile()
+    Dim fso, logFile, logFilePath
+    Dim xl, wb, ws
+    Dim rowNum, line
+    Dim totalLines
+    
+    ' Путь к файлу логов
+    logFilePath = "C:\ASTRA_Logs\dynamic_calc_log.txt"
+    
+    ' Проверяем существование файла
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FileExists(logFilePath) Then
+        MsgBox "Файл логов не найден:" & vbCrLf & logFilePath & vbCrLf & vbCrLf & _
+               "Сначала запустите расчет с функцией SetupAndRunCalculation", vbExclamation
+        Exit Sub
+    End If
+    
+    ' Создаем Excel
+    Set xl = CreateObject("Excel.Application")
+    xl.Visible = True
+    xl.DisplayAlerts = False
+    Set wb = xl.Workbooks.Add
+    Set ws = wb.Worksheets(1)
+    ws.Name = "Логи ASTRA"
+    
+    ' Заголовки
+    ws.Cells(1, 1).Value = "№"
+    ws.Cells(1, 2).Value = "Тип"
+    ws.Cells(1, 3).Value = "Сообщение"
+    ws.Range("A1:C1").Font.Bold = True
+    ws.Range("A1:C1").Interior.Color = RGB(200, 200, 200)
+    
+    rowNum = 2
+    totalLines = 0
+    
+    ' Открываем и читаем файл логов
+    Set logFile = fso.OpenTextFile(logFilePath, 1, False)
+    
+    Do While Not logFile.AtEndOfStream
+        line = logFile.ReadLine
+        line = Trim(line)
+        
+        ' Пропускаем пустые строки
+        If Len(line) > 0 Then
+            ws.Cells(rowNum, 1).Value = totalLines + 1
+            
+            ' Определяем тип сообщения по ключевым словам
+            Dim msgType
+            msgType = GetMessageType(line)
+            ws.Cells(rowNum, 2).Value = msgType
+            
+            ' Раскрашиваем строки по типу
+            Select Case msgType
+                Case "ERROR", "ОШИБКА"
+                    ws.Range("A" & rowNum & ":C" & rowNum).Interior.Color = RGB(255, 200, 200)
+                Case "WARNING", "ПРЕДУПРЕЖДЕНИЕ"
+                    ws.Range("A" & rowNum & ":C" & rowNum).Interior.Color = RGB(255, 255, 200)
+                Case "SUCCESS", "УСПЕХ"
+                    ws.Range("A" & rowNum & ":C" & rowNum).Interior.Color = RGB(200, 255, 200)
+            End Select
+            
+            ' Само сообщение
+            ws.Cells(rowNum, 3).Value = line
+            
+            rowNum = rowNum + 1
+            totalLines = totalLines + 1
+        End If
+    Loop
+    
+    logFile.Close
+    
+    ' Форматирование
+    ws.Columns("A:A").ColumnWidth = 8
+    ws.Columns("B:B").ColumnWidth = 20
+    ws.Columns("C:C").ColumnWidth = 120
+    ws.Columns("C:C").WrapText = True
+    
+    ' Добавляем фильтры
+    ws.Range("A1:C" & (rowNum - 1)).AutoFilter
+    
+    ' Закрепляем первую строку
+    ws.Range("A2").Select
+    xl.ActiveWindow.FreezePanes = True
+    
+    ' Статистика
+    Dim statsRow
+    statsRow = rowNum + 2
+    ws.Cells(statsRow, 1).Value = "Статистика:"
+    ws.Cells(statsRow, 1).Font.Bold = True
+    ws.Cells(statsRow + 1, 1).Value = "Всего строк:"
+    ws.Cells(statsRow + 1, 2).Value = totalLines
+    
+    ' Подсчитываем количество ошибок и предупреждений
+    Dim errCount, warnCount, i
+    errCount = 0
+    warnCount = 0
+    For i = 2 To rowNum - 1
+        Select Case ws.Cells(i, 2).Value
+            Case "ERROR", "ОШИБКА"
+                errCount = errCount + 1
+            Case "WARNING", "ПРЕДУПРЕЖДЕНИЕ"
+                warnCount = warnCount + 1
+        End Select
+    Next
+    
+    ws.Cells(statsRow + 2, 1).Value = "Ошибок:"
+    ws.Cells(statsRow + 2, 2).Value = errCount
+    ws.Cells(statsRow + 2, 2).Font.Color = RGB(255, 0, 0)
+    
+    ws.Cells(statsRow + 3, 1).Value = "Предупреждений:"
+    ws.Cells(statsRow + 3, 2).Value = warnCount
+    ws.Cells(statsRow + 3, 2).Font.Color = RGB(255, 128, 0)
+    
+    ws.Range("A1").Select
+    
+    MsgBox "Обработка завершена!" & vbCrLf & vbCrLf & _
+           "Всего строк: " & totalLines & vbCrLf & _
+           "Ошибок: " & errCount & vbCrLf & _
+           "Предупреждений: " & warnCount, vbInformation, "Готово"
+End Sub
+
+' --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+
+' Определение типа сообщения
+Function GetMessageType(line)
+    Dim upperLine
+    upperLine = UCase(line)
+    
+    If InStr(upperLine, "ERROR") > 0 Or InStr(upperLine, "ОШИБКА") > 0 Or InStr(upperLine, "FAILED") > 0 Then
+        GetMessageType = "ERROR"
+    ElseIf InStr(upperLine, "WARNING") > 0 Or InStr(upperLine, "ПРЕДУПРЕЖДЕНИЕ") > 0 Or InStr(upperLine, "WARN") > 0 Then
+        GetMessageType = "WARNING"
+    ElseIf InStr(upperLine, "SUCCESS") > 0 Or InStr(upperLine, "УСПЕХ") > 0 Or InStr(upperLine, "COMPLETED") > 0 Then
+        GetMessageType = "SUCCESS"
+    ElseIf InStr(upperLine, "START") > 0 Or InStr(upperLine, "BEGIN") > 0 Or InStr(upperLine, "НАЧАЛО") > 0 Then
+        GetMessageType = "START"
+    ElseIf InStr(upperLine, "END") > 0 Or InStr(upperLine, "FINISH") > 0 Or InStr(upperLine, "КОНЕЦ") > 0 Then
+        GetMessageType = "END"
+    Else
+        GetMessageType = "INFO"
+    End If
+End Function
+
+' Создание папки
+Sub CreateFolder(folderPath)
+    Dim fso
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(folderPath) Then
+        fso.CreateFolder(folderPath)
+    End If
+End Sub
+
+' Удаление файла
+Sub DeleteFileIfExists(filePath)
+    Dim fso
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If fso.FileExists(filePath) Then
+        fso.DeleteFile(filePath)
+    End If
+End Sub
