@@ -1,8 +1,16 @@
-' Получить объект ProtocolViewer
-Set pv = Rastr.Addins("AddinRastrProtocolViewer")
-Debug.Print TypeName(pv)
+' Вариант 1: Прямое обращение к свойству
+Debug.Print Rastr.Protocol
 
-' Или перебрать все аддины
-For i = 0 To Rastr.Addins.Count - 1
-    Debug.Print i & ": " & Rastr.Addins.Item(i).Name
-Next
+' Вариант 2: ProtocolText или LogText
+Debug.Print Rastr.ProtocolText
+Debug.Print Rastr.LogText
+
+' Вариант 3: Метод GetProtocol
+txt = Rastr.GetProtocol()
+Debug.Print txt
+
+' Вариант 4: Свойство Log
+Debug.Print Rastr.Log
+
+' Вариант 5: Список всех свойств Rastr
+' (в окне Immediate напишите "Rastr." и посмотрите подсказки)
