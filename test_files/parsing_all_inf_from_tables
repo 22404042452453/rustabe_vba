@@ -1,0 +1,56 @@
+Rastr.FWDynamic.Run()
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+Set wb = xl.Workbooks.Add
+
+' Создаём сводную таблицу на первом листе
+Set ws = wb.Worksheets(1)
+ws.Name = "Сводка"
+ws.Cells(1, 1).Value = "Таблица"
+ws.Cells(1, 2).Value = "Строк"
+ws.Cells(1, 3).Value = "Колонок"
+ws.Cells(1, 1).Font.Bold = True
+ws.Cells(1, 2).Font.Bold = True
+ws.Cells(1, 3).Font.Bold = True
+
+row = 2
+For i = 0 To Rastr.Tables.Count - 1
+    On Error Resume Next
+    Set t = Rastr.Tables.Item(i)
+    
+    If Not t Is Nothing Then
+        ' Заполняем сводку
+        ws.Cells(row, 1).Value = t.Name
+        ws.Cells(row, 2).Value = t.Count
+        ws.Cells(row, 3).Value = t.Cols.Count
+        
+        ' Создаём новый лист для таблицы
+        Set newWs = wb.Worksheets.Add
+        newWs.Name = Left(t.Name, 31) ' Excel ограничивает имена листов 31 символом
+        
+        ' Заголовки столбцов
+        For col = 0 To t.Cols.Count - 1
+            newWs.Cells(1, col + 1).Value = t.Cols.Item(col).Name
+            newWs.Cells(1, col + 1).Font.Bold = True
+        Next
+        
+        ' Данные таблицы
+        For rowIdx = 0 To t.Count - 1
+            For col = 0 To t.Cols.Count - 1
+                colName = t.Cols.Item(col).Name
+                newWs.Cells(rowIdx + 2, col + 1).Value = t.Cols.Item(colName).Item(rowIdx)
+            Next
+        Next
+        
+        ' Автоподбор ширины столбцов
+        newWs.Columns.AutoFit
+    End If
+    
+    On Error GoTo 0
+    row = row + 1
+Next
+
+' Автоподбор для сводного листа
+ws.Columns.AutoFit
+
+MsgBox "Готово! Всего таблиц: " & Rastr.Tables.Count
