@@ -1,38 +1,32 @@
 Sub TestRastrProtocol()
-    Dim protocol, xl, wb, ws, lines, i
+    Dim protocol, lines, i
+    
     On Error Resume Next
     protocol = Rastr.Protocol
     If Err.Number <> 0 Then
-        MsgBox "Ошибка получения протокола: " & Err.Description, vbCritical
+        MsgBox "Ошибка: " & Err.Description
         Exit Sub
     End If
     On Error GoTo 0
     
-    ' Проверяем что протокол не пустой
     If Len(protocol) = 0 Then
-        MsgBox "Протокол пустой!", vbExclamation
+        MsgBox "Протокол пустой!"
         Exit Sub
     End If
     
-    ' Выводим длину протокола
-    MsgBox "Длина протокола: " & Len(protocol) & " символов", vbInformation
+    MsgBox "Длина: " & Len(protocol) & " символов"
     
-    ' Создаем Excel и выводим протокол
     Dim xl, wb, ws
     Set xl = CreateObject("Excel.Application")
     xl.Visible = True
     Set wb = xl.Workbooks.Add
     Set ws = wb.Worksheets(1)
     
-    ' Выводим полный текст протокола
-    ws.Cells(1, 1).Value = "ПОЛНЫЙ ПРОТОКОЛ RASTR:"
+    ws.Cells(1, 1).Value = "ПРОТОКОЛ:"
     ws.Cells(1, 1).Font.Bold = True
-    ws.Cells(1, 1).Font.Size = 14
-    
     ws.Cells(3, 1).Value = protocol
     ws.Cells(3, 1).WrapText = True
     
-    ' Разбиваем на строки и выводим построчно
     If InStr(protocol, vbCrLf) > 0 Then
         lines = Split(protocol, vbCrLf)
     ElseIf InStr(protocol, vbLf) > 0 Then
@@ -41,7 +35,7 @@ Sub TestRastrProtocol()
         lines = Split(protocol, vbCr)
     End If
     
-    ws.Cells(5, 1).Value = "ПОСТРОЧНЫЙ ВЫВОД (первые 50 строк):"
+    ws.Cells(5, 1).Value = "ПОСТРОЧНО (50 строк):"
     ws.Cells(5, 1).Font.Bold = True
     
     For i = 0 To UBound(lines)
@@ -51,9 +45,6 @@ Sub TestRastrProtocol()
         End If
     Next
     
-    ws.Columns(1).ColumnWidth = 5
     ws.Columns(2).ColumnWidth = 120
-    
-    MsgBox "Протокол выведен в Excel! Всего строк: " & (UBound(lines) + 1), vbInformation
-    
+    MsgBox "Готово! Строк: " & (UBound(lines) + 1)
 End Sub
