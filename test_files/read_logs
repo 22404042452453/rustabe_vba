@@ -1,22 +1,30 @@
+' В начале модуля объявить WithEvents
+Dim WithEvents RastrObj As ASTRALib.Rastr
+Dim ProtocolText As String
+
+' Обработчик события prot
+Private Sub RastrObj_prot(ByVal str As String)
+    ProtocolText = ProtocolText & str & vbCrLf
+End Sub
+
 Sub TestRastrProtocol()
-    Dim protocol, lines, i
+    Dim xl, wb, ws, lines, i
     
-    On Error Resume Next
-    protocol = Rastr.Protocol
-    If Err.Number <> 0 Then
-        MsgBox "Ошибка: " & Err.Description
-        Exit Sub
-    End If
-    On Error GoTo 0
+    ' Инициализация с событиями
+    Set RastrObj = New ASTRALib.Rastr
+    ProtocolText = ""
     
-    If Len(protocol) = 0 Then
+    ' Загрузка и расчет (протокол будет собираться автоматически)
+    RastrObj.Load 1, "путь\к\файлу.rg2", "режим"
+    RastrObj.rgm ""
+    
+    If Len(ProtocolText) = 0 Then
         MsgBox "Протокол пустой!"
         Exit Sub
     End If
     
-    MsgBox "Длина: " & Len(protocol) & " символов"
+    MsgBox "Длина: " & Len(ProtocolText)
     
-    Dim xl, wb, ws
     Set xl = CreateObject("Excel.Application")
     xl.Visible = True
     Set wb = xl.Workbooks.Add
@@ -24,18 +32,11 @@ Sub TestRastrProtocol()
     
     ws.Cells(1, 1).Value = "ПРОТОКОЛ:"
     ws.Cells(1, 1).Font.Bold = True
-    ws.Cells(3, 1).Value = protocol
+    ws.Cells(3, 1).Value = ProtocolText
     ws.Cells(3, 1).WrapText = True
     
-    If InStr(protocol, vbCrLf) > 0 Then
-        lines = Split(protocol, vbCrLf)
-    ElseIf InStr(protocol, vbLf) > 0 Then
-        lines = Split(protocol, vbLf)
-    Else
-        lines = Split(protocol, vbCr)
-    End If
-    
-    ws.Cells(5, 1).Value = "ПОСТРОЧНО (50 строк):"
+    lines = Split(ProtocolText, vbCrLf)
+    ws.Cells(5, 1).Value = "ПОСТРОЧНО:"
     ws.Cells(5, 1).Font.Bold = True
     
     For i = 0 To UBound(lines)
