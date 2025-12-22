@@ -1,22 +1,15 @@
-' В начале модуля объявить WithEvents
-Dim WithEvents RastrObj As ASTRALib.Rastr
 Dim ProtocolText As String
-
-' Обработчик события prot
-Private Sub RastrObj_prot(ByVal str As String)
-    ProtocolText = ProtocolText & str & vbCrLf
-End Sub
 
 Sub TestRastrProtocol()
     Dim xl, wb, ws, lines, i
     
-    ' Инициализация с событиями
-    Set RastrObj = New ASTRALib.Rastr
     ProtocolText = ""
     
-    ' Загрузка и расчет (протокол будет собираться автоматически)
-    RastrObj.Load 1, "путь\к\файлу.rg2", "режим"
-    RastrObj.rgm ""
+    ' Подписываемся на событие prot
+    Rastr.prot = GetRef("CollectProtocol")
+    
+    ' Выполняем расчет (протокол собирается автоматически)
+    Rastr.rgm ""
     
     If Len(ProtocolText) = 0 Then
         MsgBox "Протокол пустой!"
@@ -48,4 +41,8 @@ Sub TestRastrProtocol()
     
     ws.Columns(2).ColumnWidth = 120
     MsgBox "Готово! Строк: " & (UBound(lines) + 1)
+End Sub
+
+Sub CollectProtocol(str)
+    ProtocolText = ProtocolText & str & vbCrLf
 End Sub
