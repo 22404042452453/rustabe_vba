@@ -1,29 +1,237 @@
-Sub GetProtocolFromRastr()
-    Dim Rastr As Object
-    Set Rastr = CreateObject("ASTRALib.Rastr")
+' ========================================
+' ФУНКЦИЯ ПАРСИНГА ПРОТОКОЛА RASTR
+' ========================================
+
+Function ParseRastrProtocol(protocol As String) As Object
+    ' Создаем словарь для результатов
+    Set ParseRastrProtocol = CreateObject("Scripting.Dictionary")
     
-    ' Загружаем файл и выполняем расчет
-    Rastr.Load 1, "C:\путь\к\файлу.rg2", "режим"
-    Rastr.rgm ""  ' Расчет установившегося режима
+    Dim lines() As String
+    Dim line As String
+    Dim i As Long
     
-    ' ПОЛУЧАЕМ ПРОТОКОЛ
-    Dim protocol As String
-    protocol = Rastr.Protocol
-    
-    ' Работаем с протоколом (например, сохраняем в файл)
-    Dim fileNum As Integer
-    fileNum = FreeFile
-    Open "C:\temp\protocol.txt" For Output As #fileNum
-    Print #fileNum, protocol
-    Close #fileNum
-    
-    ' Или выводим в Immediate Window
-    Debug.Print protocol
-    
-    ' Или ищем нужную информацию
-    If InStr(protocol, "Расчет завершен") > 0 Then
-        MsgBox "Расчет успешен!"
+    ' Разбиваем протокол на строки
+    lines = Split(protocol, vbCrLf)
+    If UBound(lines) = 0 Then
+        lines = Split(protocol, vbLf)
     End If
     
-    Set Rastr = Nothing
+    ' Инициализируем переменные для сбора данных
+    Dim errors As New Collection
+    Dim warnings As New Collection
+    Dim calcResults As New Collection
+    Dim timing As New Collection
+    Dim convergence As New Collection
+    Dim violations As New Collection
+    
+    For i = 0 To UBound(lines)
+        line = Trim(lines(i))
+        
+        If Len(line) > 0 Then
+            ' === ОШИБКИ ===
+            If InStr(1, line, "ошибка", vbTextCompare) > 0 Or _
+               InStr(1, line, "ERROR", vbTextCompare) > 0 Then
+                errors.Add line
+            End If
+            
+            ' === ПРЕДУПРЕЖДЕНИЯ ===
+            If InStr(1, line, "предупреждение", vbTextCompare) > 0 Or _
+               InStr(1, line, "WARNING", vbTextCompare) > 0 Then
+                warnings.Add line
+            End If
+            
+            ' === РЕЗУЛЬТАТЫ РАСЧЕТА ===
+            If InStr(1, line, "расчет завершен", vbTextCompare) > 0 Or _
+               InStr(1, line, "calculation completed", vbTextCompare) > 0 Then
+                calcResults.Add line
+            End If
+            
+            ' === СХОДИМОСТЬ ===
+            If InStr(1, line, "итерац", vbTextCompare) > 0 Or _
+               InStr(1, line, "iteration", vbTextCompare) > 0 Or _
+               InStr(1, line, "невязка", vbTextCompare) > 0 Then
+                convergence.Add line
+            End If
+            
+            ' === ВРЕМЯ РАСЧЕТА ===
+            If InStr(1, line, "время", vbTextCompare) > 0 Or _
+               InStr(1, line, "time", vbTextCompare) > 0 Or _
+               InStr(1, line, "сек", vbTextCompare) > 0 Then
+                timing.Add line
+            End If
+            
+            ' === НАРУШЕНИЯ ОГРАНИЧЕНИЙ ===
+            If InStr(1, line, "нарушение", vbTextCompare) > 0 Or _
+               InStr(1, line, "перегрузка", vbTextCompare) > 0 Or _
+               InStr(1, line, "violation", vbTextCompare) > 0 Or _
+               InStr(1, line, "overload", vbTextCompare) > 0 Then
+                violations.Add line
+            End If
+        End If
+    Next i
+    
+    ' Добавляем коллекции в словарь
+    ParseRastrProtocol.Add "Errors", errors
+    ParseRastrProtocol.Add "Warnings", warnings
+    ParseRastrProtocol.Add "CalcResults", calcResults
+    ParseRastrProtocol.Add "Timing", timing
+    ParseRastrProtocol.Add "Convergence", convergence
+    ParseRastrProtocol.Add "Violations", violations
+    ParseRastrProtocol.Add "FullText", protocol
+    ParseRastrProtocol.Add "LineCount", UBound(lines) + 1
+    
+End Function
+
+' ========================================
+' ФУНКЦИЯ ЗАПИСИ ПРОТОКОЛА В EXCEL
+' ========================================
+
+Sub WriteProtocolToExcel(ws As Object, protocol As String, startRow As Long)
+    Dim parsed As Object
+    Set parsed = ParseRastrProtocol(protocol)
+    
+    Dim currentRow As Long
+    currentRow = startRow
+    
+    ' === ОБЩАЯ ИНФОРМАЦИЯ ===
+    ws.Cells(currentRow, 1).Value = "ПРОТОКОЛ РАСЧЕТА"
+    ws.Cells(currentRow, 1).Font.Bold = True
+    ws.Cells(currentRow, 1).Font.Size = 12
+    currentRow = currentRow + 1
+    
+    ws.Cells(currentRow, 1).Value = "Всего строк в протоколе:"
+    ws.Cells(currentRow, 2).Value = parsed("LineCount")
+    currentRow = currentRow + 2
+    
+    ' === ОШИБКИ ===
+    If parsed("Errors").Count > 0 Then
+        ws.Cells(currentRow, 1).Value = "ОШИБКИ (" & parsed("Errors").Count & "):"
+        ws.Cells(currentRow, 1).Font.Bold = True
+        ws.Cells(currentRow, 1).Font.Color = RGB(255, 0, 0)
+        currentRow = currentRow + 1
+        
+        Dim err As Variant
+        For Each err In parsed("Errors")
+            ws.Cells(currentRow, 2).Value = err
+            currentRow = currentRow + 1
+        Next
+        currentRow = currentRow + 1
+    End If
+    
+    ' === ПРЕДУПРЕЖДЕНИЯ ===
+    If parsed("Warnings").Count > 0 Then
+        ws.Cells(currentRow, 1).Value = "ПРЕДУПРЕЖДЕНИЯ (" & parsed("Warnings").Count & "):"
+        ws.Cells(currentRow, 1).Font.Bold = True
+        ws.Cells(currentRow, 1).Font.Color = RGB(255, 165, 0)
+        currentRow = currentRow + 1
+        
+        Dim warn As Variant
+        For Each warn In parsed("Warnings")
+            ws.Cells(currentRow, 2).Value = warn
+            currentRow = currentRow + 1
+        Next
+        currentRow = currentRow + 1
+    End If
+    
+    ' === НАРУШЕНИЯ ===
+    If parsed("Violations").Count > 0 Then
+        ws.Cells(currentRow, 1).Value = "НАРУШЕНИЯ ОГРАНИЧЕНИЙ (" & parsed("Violations").Count & "):"
+        ws.Cells(currentRow, 1).Font.Bold = True
+        ws.Cells(currentRow, 1).Font.Color = RGB(255, 0, 0)
+        currentRow = currentRow + 1
+        
+        Dim viol As Variant
+        For Each viol In parsed("Violations")
+            ws.Cells(currentRow, 2).Value = viol
+            currentRow = currentRow + 1
+        Next
+        currentRow = currentRow + 1
+    End If
+    
+    ' === СХОДИМОСТЬ ===
+    If parsed("Convergence").Count > 0 Then
+        ws.Cells(currentRow, 1).Value = "СХОДИМОСТЬ (" & parsed("Convergence").Count & "):"
+        ws.Cells(currentRow, 1).Font.Bold = True
+        currentRow = currentRow + 1
+        
+        Dim conv As Variant
+        For Each conv In parsed("Convergence")
+            ws.Cells(currentRow, 2).Value = conv
+            currentRow = currentRow + 1
+        Next
+        currentRow = currentRow + 1
+    End If
+    
+    ' === ВРЕМЯ РАСЧЕТА ===
+    If parsed("Timing").Count > 0 Then
+        ws.Cells(currentRow, 1).Value = "ВРЕМЯ РАСЧЕТА (" & parsed("Timing").Count & "):"
+        ws.Cells(currentRow, 1).Font.Bold = True
+        currentRow = currentRow + 1
+        
+        Dim tim As Variant
+        For Each tim In parsed("Timing")
+            ws.Cells(currentRow, 2).Value = tim
+            currentRow = currentRow + 1
+        Next
+        currentRow = currentRow + 1
+    End If
+    
+    ' === РЕЗУЛЬТАТЫ ===
+    If parsed("CalcResults").Count > 0 Then
+        ws.Cells(currentRow, 1).Value = "РЕЗУЛЬТАТЫ РАСЧЕТА:"
+        ws.Cells(currentRow, 1).Font.Bold = True
+        ws.Cells(currentRow, 1).Font.Color = RGB(0, 128, 0)
+        currentRow = currentRow + 1
+        
+        Dim res As Variant
+        For Each res In parsed("CalcResults")
+            ws.Cells(currentRow, 2).Value = res
+            currentRow = currentRow + 1
+        Next
+        currentRow = currentRow + 1
+    End If
+    
+    ' === ПОЛНЫЙ ТЕКСТ ===
+    ws.Cells(currentRow, 1).Value = "ПОЛНЫЙ ТЕКСТ ПРОТОКОЛА:"
+    ws.Cells(currentRow, 1).Font.Bold = True
+    currentRow = currentRow + 1
+    
+    ws.Cells(currentRow, 1).Value = parsed("FullText")
+    ws.Cells(currentRow, 1).WrapText = True
+    
+    ' Форматирование
+    ws.Columns(1).ColumnWidth = 30
+    ws.Columns(2).ColumnWidth = 100
+    
 End Sub
+
+' ========================================
+' ПРИМЕР ИСПОЛЬЗОВАНИЯ В ВАШЕМ КОДЕ
+' ========================================
+
+' Вставьте это после ElseIf spFWDynamic.Run() <> 0 Then ... Else
+
+' Получаем протокол
+Dim protocol As String
+On Error Resume Next
+protocol = Rastr.Protocol
+If Err.Number <> 0 Then
+    protocol = "Протокол недоступен"
+    Err.Clear
+End If
+On Error GoTo 0
+
+' Парсим протокол
+Dim parsedProtocol As Object
+Set parsedProtocol = ParseRastrProtocol(protocol)
+
+' Выводим краткую информацию в результаты
+wsResult.Cells(resultRow, 7).Value = "Ошибок: " & parsedProtocol("Errors").Count
+wsResult.Cells(resultRow, 8).Value = "Предупреждений: " & parsedProtocol("Warnings").Count
+wsResult.Cells(resultRow, 9).Value = "Нарушений: " & parsedProtocol("Violations").Count
+
+' Создаем отдельный лист для детального протокола (опционально)
+' Dim wsProtocolDetail As Object
+' Set wsProtocolDetail = wb.Worksheets.Add
+' wsProtocolDetail.Name = "Протокол_" & scenarioCount
+' Call WriteProtocolToExcel(wsProtocolDetail, protocol, 1)
