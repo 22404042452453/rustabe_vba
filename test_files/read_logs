@@ -1,16 +1,15 @@
-' Вариант 1: Прямое обращение к свойству
-Debug.Print Rastr.Protocol
+' Открыть файл лога
+Open "D:\logs\my_log.txt" For Output As #1
 
-' Вариант 2: ProtocolText или LogText
-Debug.Print Rastr.ProtocolText
-Debug.Print Rastr.LogText
+' Записать сообщение
+Print #1, Now() & " - Загружаю сценарий: " & scenarioName
 
-' Вариант 3: Метод GetProtocol
-txt = Rastr.GetProtocol()
-Debug.Print txt
+' После расчёта
+If result <> 0 Then
+    Print #1, Now() & " - ОШИБКА: код " & result
+Else
+    Print #1, Now() & " - Расчёт успешен"
+End If
 
-' Вариант 4: Свойство Log
-Debug.Print Rastr.Log
-
-' Вариант 5: Список всех свойств Rastr
-' (в окне Immediate напишите "Rastr." и посмотрите подсказки)
+' Закрыть файл
+Close #1
