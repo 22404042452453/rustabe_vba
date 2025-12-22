@@ -3,8 +3,12 @@ Set xl = CreateObject("Excel.Application")
 xl.Visible = True
 Set wb = xl.Workbooks.Add
 
-' Список таблиц для исключения
-excludeTables = Array("vetvi", "node")
+' Функция проверки исключения
+Function IsExcluded(tableName)
+    IsExcluded = False
+    If LCase(tableName) = "vetvi" Then IsExcluded = True
+    If LCase(tableName) = "node" Then IsExcluded = True
+End Function
 
 ' Создаём сводную таблицу на первом листе
 Set ws = wb.Worksheets(1)
@@ -17,21 +21,15 @@ ws.Cells(1, 2).Font.Bold = True
 ws.Cells(1, 3).Font.Bold = True
 
 row = 2
+processedCount = 0
+
 For i = 0 To Rastr.Tables.Count - 1
     On Error Resume Next
     Set t = Rastr.Tables.Item(i)
     
     If Not t Is Nothing And t.Size > 0 Then
-        ' Проверяем, не входит ли таблица в список исключений
-        skipTable = False
-        For Each excludeName In excludeTables
-            If LCase(t.Name) = LCase(excludeName) Then
-                skipTable = True
-                Exit For
-            End If
-        Next
-        
-        If Not skipTable Then
+        ' Проверяем исключение
+        If Not IsExcluded(t.Name) Then
             ' Заполняем сводку
             ws.Cells(row, 1).Value = t.Name
             ws.Cells(row, 2).Value = t.Size
@@ -77,6 +75,7 @@ For i = 0 To Rastr.Tables.Count - 1
             newWs.Columns.AutoFit
             
             row = row + 1
+            processedCount = processedCount + 1
         End If
     End If
     
@@ -86,4 +85,4 @@ Next
 ' Автоподбор для сводного листа
 ws.Columns.AutoFit
 
-MsgBox "Готово! Обработано таблиц: " & (row - 2) & " из " & Rastr.Tables.Count
+MsgBox "Готово! Обработано таблиц: " & processedCount & " из " & Rastr.Tables.Count
