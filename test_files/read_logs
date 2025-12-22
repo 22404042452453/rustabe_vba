@@ -1,6 +1,5 @@
 Sub TestRastrProtocol()
-    Dim protocol As String
-    Dim xl, wb, ws, lines, i
+    Dim protocol, xl, wb, ws, lines, i
     On Error Resume Next
     protocol = Rastr.Protocol
     If Err.Number <> 0 Then
@@ -34,7 +33,6 @@ Sub TestRastrProtocol()
     ws.Cells(3, 1).WrapText = True
     
     ' Разбиваем на строки и выводим построчно
-    Dim lines, i
     If InStr(protocol, vbCrLf) > 0 Then
         lines = Split(protocol, vbCrLf)
     ElseIf InStr(protocol, vbLf) > 0 Then
