@@ -1,15 +1,29 @@
-' Открыть файл лога
-Open "D:\logs\my_log.txt" For Output As #1
-
-' Записать сообщение
-Print #1, Now() & " - Загружаю сценарий: " & scenarioName
-
-' После расчёта
-If result <> 0 Then
-    Print #1, Now() & " - ОШИБКА: код " & result
-Else
-    Print #1, Now() & " - Расчёт успешен"
-End If
-
-' Закрыть файл
-Close #1
+Sub GetProtocolFromRastr()
+    Dim Rastr As Object
+    Set Rastr = CreateObject("ASTRALib.Rastr")
+    
+    ' Загружаем файл и выполняем расчет
+    Rastr.Load 1, "C:\путь\к\файлу.rg2", "режим"
+    Rastr.rgm ""  ' Расчет установившегося режима
+    
+    ' ПОЛУЧАЕМ ПРОТОКОЛ
+    Dim protocol As String
+    protocol = Rastr.Protocol
+    
+    ' Работаем с протоколом (например, сохраняем в файл)
+    Dim fileNum As Integer
+    fileNum = FreeFile
+    Open "C:\temp\protocol.txt" For Output As #fileNum
+    Print #fileNum, protocol
+    Close #fileNum
+    
+    ' Или выводим в Immediate Window
+    Debug.Print protocol
+    
+    ' Или ищем нужную информацию
+    If InStr(protocol, "Расчет завершен") > 0 Then
+        MsgBox "Расчет успешен!"
+    End If
+    
+    Set Rastr = Nothing
+End Sub
