@@ -1,8 +1,8 @@
-' Простое чтение протокола RastrWin
+' Получить объект ProtocolViewer
+Set pv = Rastr.Addins("AddinRastrProtocolViewer")
+Debug.Print TypeName(pv)
 
-Set tblProt = Rastr.Tables("Protocol")
-Set colMessage = tblProt.Cols("Message")
-
-For i = 0 To tblProt.Size - 1
-    Debug.Print colMessage.ZS(i)
+' Или перебрать все аддины
+For i = 0 To Rastr.Addins.Count - 1
+    Debug.Print i & ": " & Rastr.Addins.Item(i).Name
 Next
