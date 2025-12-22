@@ -11,9 +11,12 @@ Function ParseRastrProtocol(protocol As String) As Object
     Dim i As Long
     
     ' Разбиваем протокол на строки
-    lines = Split(protocol, vbCrLf)
-    If UBound(lines) = 0 Then
+    If InStr(protocol, vbCrLf) > 0 Then
+        lines = Split(protocol, vbCrLf)
+    ElseIf InStr(protocol, vbLf) > 0 Then
         lines = Split(protocol, vbLf)
+    Else
+        lines = Split(protocol, vbCr)
     End If
     
     ' Инициализируем переменные для сбора данных
