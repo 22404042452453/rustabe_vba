@@ -3,6 +3,9 @@ Set xl = CreateObject("Excel.Application")
 xl.Visible = True
 Set wb = xl.Workbooks.Add
 
+' Список таблиц для исключения
+excludeTables = Array("vetvi", "node")
+
 ' Создаём сводную таблицу на первом листе
 Set ws = wb.Worksheets(1)
 ws.Name = "Сводка"
@@ -19,56 +22,68 @@ For i = 0 To Rastr.Tables.Count - 1
     Set t = Rastr.Tables.Item(i)
     
     If Not t Is Nothing And t.Size > 0 Then
-        ' Заполняем сводку
-        ws.Cells(row, 1).Value = t.Name
-        ws.Cells(row, 2).Value = t.Size
-        ws.Cells(row, 3).Value = t.Cols.Count
-        
-        ' Создаём новый лист для таблицы
-        Set newWs = wb.Worksheets.Add
-        newWs.Name = Left(t.Name, 31)
-        
-        ' Заголовки столбцов
-        newWs.Cells(1, 1).Value = "Строка"
-        For col = 0 To t.Cols.Count - 1
-            newWs.Cells(1, col + 2).Value = t.Cols.Item(col).Name
+        ' Проверяем, не входит ли таблица в список исключений
+        skipTable = False
+        For Each excludeName In excludeTables
+            If LCase(t.Name) = LCase(excludeName) Then
+                skipTable = True
+                Exit For
+            End If
         Next
-        newWs.Rows(1).Font.Bold = True
         
-        ' Данные таблицы
-        For rowIdx = 0 To t.Size - 1
-            newWs.Cells(rowIdx + 2, 1).Value = rowIdx
+        If Not skipTable Then
+            ' Заполняем сводку
+            ws.Cells(row, 1).Value = t.Name
+            ws.Cells(row, 2).Value = t.Size
+            ws.Cells(row, 3).Value = t.Cols.Count
             
+            ' Создаём новый лист для таблицы
+            Set newWs = wb.Worksheets.Add
+            newWs.Name = Left(t.Name, 31)
+            
+            ' Заголовки столбцов
+            newWs.Cells(1, 1).Value = "Строка"
             For col = 0 To t.Cols.Count - 1
-                Set colObj = t.Cols.Item(col)
-                
-                On Error Resume Next
-                ' Пробуем как строку
-                val = colObj.ZS(rowIdx)
-                If Err.Number <> 0 Then
-                    Err.Clear
-                    ' Пробуем как число
-                    val = colObj.Z(rowIdx)
-                End If
-                
-                If Err.Number = 0 Then
-                    newWs.Cells(rowIdx + 2, col + 2).Value = val
-                Else
-                    newWs.Cells(rowIdx + 2, col + 2).Value = "[ошибка]"
-                End If
-                On Error GoTo 0
+                newWs.Cells(1, col + 2).Value = t.Cols.Item(col).Name
             Next
-        Next
-        
-        ' Автоподбор ширины столбцов
-        newWs.Columns.AutoFit
+            newWs.Rows(1).Font.Bold = True
+            
+            ' Данные таблицы
+            For rowIdx = 0 To t.Size - 1
+                newWs.Cells(rowIdx + 2, 1).Value = rowIdx
+                
+                For col = 0 To t.Cols.Count - 1
+                    Set colObj = t.Cols.Item(col)
+                    
+                    On Error Resume Next
+                    ' Пробуем как строку
+                    val = colObj.ZS(rowIdx)
+                    If Err.Number <> 0 Then
+                        Err.Clear
+                        ' Пробуем как число
+                        val = colObj.Z(rowIdx)
+                    End If
+                    
+                    If Err.Number = 0 Then
+                        newWs.Cells(rowIdx + 2, col + 2).Value = val
+                    Else
+                        newWs.Cells(rowIdx + 2, col + 2).Value = "[ошибка]"
+                    End If
+                    On Error GoTo 0
+                Next
+            Next
+            
+            ' Автоподбор ширины столбцов
+            newWs.Columns.AutoFit
+            
+            row = row + 1
+        End If
     End If
     
     On Error GoTo 0
-    row = row + 1
 Next
 
 ' Автоподбор для сводного листа
 ws.Columns.AutoFit
 
-MsgBox "Готово! Всего таблиц: " & Rastr.Tables.Count
+MsgBox "Готово! Обработано таблиц: " & (row - 2) & " из " & Rastr.Tables.Count
