@@ -1,6 +1,6 @@
 Sub TestRastrProtocol()
-    ' Получаем протокол из Rastr
     Dim protocol As String
+    Dim xl, wb, ws, lines, i
     On Error Resume Next
     protocol = Rastr.Protocol
     If Err.Number <> 0 Then
