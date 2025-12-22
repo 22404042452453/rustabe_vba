@@ -6,7 +6,7 @@ Function ParseRastrProtocol(protocol As String) As Object
     ' Создаем словарь для результатов
     Set ParseRastrProtocol = CreateObject("Scripting.Dictionary")
     
-    Dim lines() As String
+    Dim lines
     Dim line As String
     Dim i As Long
     
