@@ -1,4 +1,4 @@
-' ВЕРСИЯ С DIJ - анализ критических углов по ветвям (ИСПРАВЛЕННАЯ)
+' АНАЛИЗ КРИТИЧЕСКИХ УГЛОВ ПО ВЕТВЯМ (dij) - ЧИСТАЯ ВЕРСИЯ
 
 ' Пересчёт режима перед динамикой
 Function SolveUR()
@@ -57,7 +57,7 @@ End If
 MsgBox "Найдено выделенных ветвей: " & selCount & vbCrLf & _
        "Анализ будет выполнен только для них.", vbInformation, "Режим выделения"
 
-' === 1. ЗАПУСК ДИНАМИКИ ===
+' === ЗАПУСК ДИНАМИКИ ===
 urRes = SolveUR()
 If urRes <> 0 Then
     wsResult.Cells(resultRow, 1).Value = "ОШИБКА: расчёт УР не выполнен (код " & urRes & ")"
@@ -72,10 +72,9 @@ If dynRes <> 0 Then
     WScript.Quit
 End If
 
-' === 2. ВЫГРУЗКА ДАННЫХ ВЫДЕЛЕННЫХ ВЕТВЕЙ ===
+' === ВЫГРУЗКА ДАННЫХ ВЫДЕЛЕННЫХ ВЕТВЕЙ ===
 Const MaxSnapshotIndex = 1005
 Dim cachedSnapIdx: cachedSnapIdx = -1
-Dim cachedParamName: cachedParamName = ""
 Dim processedCount: processedCount = 0
 
 For i = 0 To tbl.Size - 1
@@ -83,90 +82,63 @@ For i = 0 To tbl.Size - 1
         ' Пропускаем невыделенные
     Else
     
+    Dim vetvName, nNACH, nKON
     vetvName = colName.ZS(i)
     nNACH = colIp.Z(i)
     nKON = colIq.Z(i)
     
     ' Получаем снимки dij для ветви
-    PlotDij = Empty
-    Dim snapIdx, tmpPlot
+    Dim PlotDij: PlotDij = Empty
+    Dim foundData: foundData = False
     
-    ' Если уже нашли рабочий индекс - используем его
+    ' Используем кеш снимка если найден ранее
     If cachedSnapIdx >= 0 Then
         On Error Resume Next
-        tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", cachedParamName, i, cachedSnapIdx)
-        errNum = Err.Number
-        On Error GoTo 0
-        If errNum = 0 And IsArray(tmpPlot) Then
-            PlotDij = tmpPlot
+        PlotDij = Rastr.GetChainedGraphSnapshot("vetv", "dij", i, cachedSnapIdx)
+        If Err.Number = 0 And IsArray(PlotDij) Then
+            foundData = True
         Else
             cachedSnapIdx = -1
-            cachedParamName = ""
         End If
+        Err.Clear
+        On Error GoTo 0
     End If
     
-    ' Если кеш не помог - ищем индекс
-    If Not IsArray(PlotDij) Then
+    ' Ищем индекс снимка
+    If Not foundData Then
+        Dim snapIdx
         For snapIdx = MaxSnapshotIndex To 0 Step -1
             On Error Resume Next
-            tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "dij", i, snapIdx)
-            errNum = Err.Number
-            On Error GoTo 0
-            If errNum = 0 And IsArray(tmpPlot) Then
-                PlotDij = tmpPlot
+            PlotDij = Rastr.GetChainedGraphSnapshot("vetv", "dij", i, snapIdx)
+            If Err.Number = 0 And IsArray(PlotDij) Then
                 cachedSnapIdx = snapIdx
-                cachedParamName = "dij"
+                foundData = True
+                Err.Clear
                 Exit For
             End If
+            Err.Clear
+            On Error GoTo 0
         Next
     End If
     
-    ' Пробуем Delta
-    If Not IsArray(PlotDij) Then
-        For snapIdx = MaxSnapshotIndex To 0 Step -1
-            On Error Resume Next
-            tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "Delta", i, snapIdx)
-            errNum = Err.Number
-            On Error GoTo 0
-            If errNum = 0 And IsArray(tmpPlot) Then
-                PlotDij = tmpPlot
-                cachedSnapIdx = snapIdx
-                cachedParamName = "Delta"
-                Exit For
-            End If
-        Next
-    End If
-    
-    ' Пробуем d_angle
-    If Not IsArray(PlotDij) Then
-        For snapIdx = MaxSnapshotIndex To 0 Step -1
-            On Error Resume Next
-            tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "d_angle", i, snapIdx)
-            errNum = Err.Number
-            On Error GoTo 0
-            If errNum = 0 And IsArray(tmpPlot) Then
-                PlotDij = tmpPlot
-                cachedSnapIdx = snapIdx
-                cachedParamName = "d_angle"
-                Exit For
-            End If
-        Next
-    End If
-    
-    ' === ВЫГРУЗКА В EXCEL (ИСПРАВЛЕННАЯ ВЕРСИЯ) ===
-    If IsArray(PlotDij) Then
+    ' === ВЫГРУЗКА В EXCEL ===
+    If foundData And IsArray(PlotDij) Then
+        Dim dijCol, timeCol, checkCol
         dijCol = dataCol
         timeCol = dataCol + 1
         checkCol = dataCol + 2
         
-        ' Заголовки на листе данных
+        ' Заголовки
         wsData.Cells(1, dijCol).Value = vetvName & " (dij)"
         wsData.Cells(1, timeCol).Value = vetvName & " (Time)"
         wsData.Cells(1, checkCol).Value = vetvName & " (>180)"
         
-        ' ИСПРАВЛЕНИЕ: Проверяем структуру массива и записываем построчно
-        On Error Resume Next
+        ' Определяем структуру массива
         Dim lb1, ub1, lb2, ub2, is2D
+        Dim npoints: npoints = 0
+        Dim rowIdx: rowIdx = 2
+        
+        On Error Resume Next
         lb1 = LBound(PlotDij, 1)
         ub1 = UBound(PlotDij, 1)
         lb2 = LBound(PlotDij, 2)
@@ -175,49 +147,65 @@ For i = 0 To tbl.Size - 1
         Err.Clear
         On Error GoTo 0
         
-        Dim npoints: npoints = 0
-        Dim rowIdx: rowIdx = 2
-        Dim k ' Переменная для циклов
-        
+        ' Обработка массива
         If is2D Then
-            ' Двумерный массив: определяем ориентацию
-            If (ub2 - lb2 + 1) = 2 Then
-                ' Массив вида (n, 2) - каждая строка: угол, время
-                For k = lb1 To ub1
-                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(k, lb2)      ' dij
-                    wsData.Cells(rowIdx, timeCol).Value = PlotDij(k, lb2 + 1)  ' время
-                    rowIdx = rowIdx + 1
+            ' Двумерный массив
+            Dim dim1Size, dim2Size
+            dim1Size = ub1 - lb1 + 1
+            dim2Size = ub2 - lb2 + 1
+            
+            If dim2Size = 2 Then
+                ' Массив (n, 2): каждая строка = [угол, время]
+                Dim m
+                For m = lb1 To ub1
+                    On Error Resume Next
+                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(m, lb2)
+                    wsData.Cells(rowIdx, timeCol).Value = PlotDij(m, lb2 + 1)
+                    If Err.Number = 0 Then rowIdx = rowIdx + 1
+                    Err.Clear
+                    On Error GoTo 0
                 Next
-                npoints = ub1 - lb1 + 1
-            ElseIf (ub1 - lb1 + 1) = 2 Then
-                ' Массив вида (2, n) - транспонированный
-                For k = lb2 To ub2
-                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(lb1, k)      ' dij
-                    wsData.Cells(rowIdx, timeCol).Value = PlotDij(lb1 + 1, k)  ' время
-                    rowIdx = rowIdx + 1
+                npoints = rowIdx - 2
+            ElseIf dim1Size = 2 Then
+                ' Массив (2, n): транспонированный
+                Dim n
+                For n = lb2 To ub2
+                    On Error Resume Next
+                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(lb1, n)
+                    wsData.Cells(rowIdx, timeCol).Value = PlotDij(lb1 + 1, n)
+                    If Err.Number = 0 Then rowIdx = rowIdx + 1
+                    Err.Clear
+                    On Error GoTo 0
                 Next
-                npoints = ub2 - lb2 + 1
+                npoints = rowIdx - 2
             End If
         Else
-            ' Одномерный массив - пытаемся интерпретировать как чередующиеся dij/время
+            ' Одномерный массив: чередующиеся значения [dij1, time1, dij2, time2, ...]
             Dim arrSize: arrSize = ub1 - lb1 + 1
             If arrSize Mod 2 = 0 Then
-                For k = lb1 To ub1 Step 2
-                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(k)      ' dij
-                    If k + 1 <= ub1 Then
-                        wsData.Cells(rowIdx, timeCol).Value = PlotDij(k + 1)  ' время
+                Dim p
+                For p = lb1 To ub1 Step 2
+                    On Error Resume Next
+                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(p)
+                    If p + 1 <= ub1 Then
+                        wsData.Cells(rowIdx, timeCol).Value = PlotDij(p + 1)
                     End If
-                    rowIdx = rowIdx + 1
+                    If Err.Number = 0 Then rowIdx = rowIdx + 1
+                    Err.Clear
+                    On Error GoTo 0
                 Next
-                npoints = arrSize / 2
+                npoints = rowIdx - 2
             End If
         End If
         
+        ' Создаём формулы если есть данные
         If npoints > 0 Then
-            ' Формула проверки критического значения
-            wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(ABS(RC" & dijCol & ")>180,ROW(),999999)"
+            ' Формула проверки |dij| > 180
+            wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = _
+                "=IF(ABS(RC" & dijCol & ")>180,ROW(),999999)"
             
-            ' Диапазоны для формул
+            ' Диапазоны для результатов
+            Dim dijRange, timeRange, checkRange
             dijRange = wsData.Cells(2, dijCol).Address(False, False, 1, True) & ":" & _
                        wsData.Cells(npoints + 1, dijCol).Address(False, False, 1, True)
             timeRange = wsData.Cells(2, timeCol).Address(False, False, 1, True) & ":" & _
@@ -225,25 +213,35 @@ For i = 0 To tbl.Size - 1
             checkRange = wsData.Cells(2, checkCol).Address(False, False, 1, True) & ":" & _
                          wsData.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
             
-            ' Запись в лист результатов
+            ' Запись в результаты
             wsResult.Cells(resultRow, 1).Value = vetvName
             wsResult.Cells(resultRow, 2).Value = nNACH
             wsResult.Cells(resultRow, 3).Value = nKON
-            wsResult.Cells(resultRow, 4).Formula = "=MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))"
-            wsResult.Cells(resultRow, 5).Formula = "=IF(AND(MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
-            wsResult.Cells(resultRow, 6).Formula = "=IF(MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))>180,""КРИТИЧЕСКИЙ dij (ЭЦК)"",""Норма"")"
+            
+            ' MAX(|dij|) = MAX(макс, -мин)
+            wsResult.Cells(resultRow, 4).Formula = _
+                "=MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))"
+            
+            ' Время когда |dij| > 180
+            wsResult.Cells(resultRow, 5).Formula = _
+                "=IF(AND(MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))>180,MIN(" & checkRange & ")<999999)," & _
+                "INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+            
+            ' Статус
+            wsResult.Cells(resultRow, 6).Formula = _
+                "=IF(MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))>180," & _
+                """КРИТИЧЕСКИЙ dij (ЭЦК)"",""Норма"")"
             
             resultRow = resultRow + 1
             dataCol = dataCol + 3
             processedCount = processedCount + 1
         Else
-            ' Не удалось распарсить массив
+            ' Массив пуст
             wsResult.Cells(resultRow, 1).Value = vetvName
             wsResult.Cells(resultRow, 2).Value = nNACH
             wsResult.Cells(resultRow, 3).Value = nKON
-            wsResult.Cells(resultRow, 4).Value = "Ошибка парсинга"
-            wsResult.Cells(resultRow, 5).Value = ""
-            wsResult.Cells(resultRow, 6).Value = "ОШИБКА: структура данных"
+            wsResult.Cells(resultRow, 4).Value = "Пустой массив"
+            wsResult.Cells(resultRow, 6).Value = "ОШИБКА: нет точек"
             resultRow = resultRow + 1
             processedCount = processedCount + 1
         End If
@@ -253,19 +251,18 @@ For i = 0 To tbl.Size - 1
         wsResult.Cells(resultRow, 2).Value = nNACH
         wsResult.Cells(resultRow, 3).Value = nKON
         wsResult.Cells(resultRow, 4).Value = "Нет данных"
-        wsResult.Cells(resultRow, 5).Value = ""
-        wsResult.Cells(resultRow, 6).Value = "ОШИБКА: нет данных"
+        wsResult.Cells(resultRow, 6).Value = "ОШИБКА: нет снимка dij"
         resultRow = resultRow + 1
         processedCount = processedCount + 1
     End If
     
-    End If
+    End If ' Конец проверки sel
 Next
 
 ' === ФИНАЛИЗАЦИЯ ===
 xl.Calculate
 
-' Фиксация результатов
+' Фиксация результатов (конвертация формул в значения)
 If resultRow > 2 Then
     wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value = _
         wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value
@@ -277,13 +274,9 @@ wsResult.Columns.AutoFit
 ' Подсветка критических углов
 For r = 2 To resultRow - 1
     On Error Resume Next
-    Dim cellVal
-    cellVal = wsResult.Cells(r, 6).Value
-    If Err.Number = 0 Then
-        If cellVal = "КРИТИЧЕСКИЙ dij (ЭЦК)" Then
-            wsResult.Range(wsResult.Cells(r, 1), wsResult.Cells(r, 6)).Interior.Color = RGB(255, 200, 200)
-            wsResult.Cells(r, 6).Font.Bold = True
-        End If
+    If wsResult.Cells(r, 6).Value = "КРИТИЧЕСКИЙ dij (ЭЦК)" Then
+        wsResult.Range(wsResult.Cells(r, 1), wsResult.Cells(r, 6)).Interior.Color = RGB(255, 200, 200)
+        wsResult.Cells(r, 6).Font.Bold = True
     End If
     Err.Clear
     On Error GoTo 0
@@ -293,6 +286,4 @@ xl.ScreenUpdating = True
 MsgBox "Анализ завершен!" & vbCrLf & _
        "Обработано ветвей: " & processedCount, vbInformation, "Готово"
 
-On Error Resume Next
 xl.DisplayAlerts = True
-On Error GoTo 0
