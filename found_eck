@@ -147,6 +147,15 @@ For i = 0 To tbl.Size - 1
         Err.Clear
         On Error GoTo 0
         
+        ' Если не удалось получить bounds для 1D массива, попробуем ещё раз
+        If Not is2D Then
+            On Error Resume Next
+            lb1 = LBound(PlotDij)
+            ub1 = UBound(PlotDij)
+            Err.Clear
+            On Error GoTo 0
+        End If
+        
         ' Обработка массива
         If is2D Then
             ' Двумерный массив
@@ -178,23 +187,48 @@ For i = 0 To tbl.Size - 1
                     On Error GoTo 0
                 Next
                 npoints = rowIdx - 2
-            End If
-        Else
-            ' Одномерный массив: чередующиеся значения [dij1, time1, dij2, time2, ...]
-            Dim arrSize: arrSize = ub1 - lb1 + 1
-            If arrSize Mod 2 = 0 Then
-                Dim p
-                For p = lb1 To ub1 Step 2
+            Else
+                ' Другой 2D формат - пробуем первую строку как данные
+                Dim k
+                For k = lb2 To ub2
                     On Error Resume Next
-                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(p)
-                    If p + 1 <= ub1 Then
-                        wsData.Cells(rowIdx, timeCol).Value = PlotDij(p + 1)
-                    End If
+                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(lb1, k)
                     If Err.Number = 0 Then rowIdx = rowIdx + 1
                     Err.Clear
                     On Error GoTo 0
                 Next
                 npoints = rowIdx - 2
+            End If
+        Else
+            ' Одномерный массив
+            Dim arrSize: arrSize = ub1 - lb1 + 1
+            If arrSize > 0 Then
+                If arrSize Mod 2 = 0 Then
+                    ' Чередующиеся значения [dij1, time1, dij2, time2, ...]
+                    Dim p
+                    For p = lb1 To ub1 Step 2
+                        On Error Resume Next
+                        wsData.Cells(rowIdx, dijCol).Value = PlotDij(p)
+                        If p + 1 <= ub1 Then
+                            wsData.Cells(rowIdx, timeCol).Value = PlotDij(p + 1)
+                        End If
+                        If Err.Number = 0 Then rowIdx = rowIdx + 1
+                        Err.Clear
+                        On Error GoTo 0
+                    Next
+                    npoints = rowIdx - 2
+                Else
+                    ' Нечётное количество - только углы
+                    Dim q
+                    For q = lb1 To ub1
+                        On Error Resume Next
+                        wsData.Cells(rowIdx, dijCol).Value = PlotDij(q)
+                        If Err.Number = 0 Then rowIdx = rowIdx + 1
+                        Err.Clear
+                        On Error GoTo 0
+                    Next
+                    npoints = rowIdx - 2
+                End If
             End If
         End If
         
