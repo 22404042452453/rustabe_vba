@@ -1,48 +1,24 @@
-Dim ProtocolText As String
+' Запуск C# программы
+Set shell = CreateObject("WScript.Shell")
+rastrFile = Rastr.Get("Filename")
+shell.Run "C:\Path\To\dot_tst_rastr.exe " & Chr(34) & rastrFile & Chr(34), 1, True
 
-Sub TestRastrProtocol()
-    Dim xl, wb, ws, lines, i
-    
-    ProtocolText = ""
-    
-    ' Подписываемся на событие prot
-    Rastr.prot = GetRef("CollectProtocol")
-    
-    ' Выполняем расчет (протокол собирается автоматически)
-    Rastr.rgm ""
-    
-    If Len(ProtocolText) = 0 Then
-        MsgBox "Протокол пустой!"
-        Exit Sub
-    End If
-    
-    MsgBox "Длина: " & Len(ProtocolText)
-    
-    Set xl = CreateObject("Excel.Application")
-    xl.Visible = True
-    Set wb = xl.Workbooks.Add
-    Set ws = wb.Worksheets(1)
-    
-    ws.Cells(1, 1).Value = "ПРОТОКОЛ:"
-    ws.Cells(1, 1).Font.Bold = True
-    ws.Cells(3, 1).Value = ProtocolText
-    ws.Cells(3, 1).WrapText = True
-    
-    lines = Split(ProtocolText, vbCrLf)
-    ws.Cells(5, 1).Value = "ПОСТРОЧНО:"
-    ws.Cells(5, 1).Font.Bold = True
-    
-    For i = 0 To UBound(lines)
-        If i < 50 Then
-            ws.Cells(6 + i, 1).Value = i + 1
-            ws.Cells(6 + i, 2).Value = lines(i)
-        End If
-    Next
-    
-    ws.Columns(2).ColumnWidth = 120
-    MsgBox "Готово! Строк: " & (UBound(lines) + 1)
-End Sub
+' Чтение логов в Excel
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set logFile = fso.OpenTextFile("C:\Temp\rastr_log.txt", 1)
+logs = logFile.ReadAll
+logFile.Close
 
-Sub CollectProtocol(str)
-    ProtocolText = ProtocolText & str & vbCrLf
-End Sub
+' Вывод в Excel
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+Set wb = xl.Workbooks.Add
+Set ws = wb.Worksheets(1)
+
+logLines = Split(logs, vbCrLf)
+For i = 0 To UBound(logLines)
+    ws.Cells(i + 1, 1).Value = logLines(i)
+Next
+
+ws.Columns(1).AutoFit
+MsgBox "Готово! Логов: " & UBound(logLines) + 1
