@@ -66,7 +66,7 @@ For i = 0 To tbl.Size - 1
     nKON = colIq.Z(i)
     
     ' Получаем снимки dij для ветви
-    Set PlotDij = Nothing
+    PlotDij = Empty
     Dim snapIdx, tmpPlot
     For snapIdx = MaxSnapshotIndex To 0 Step -1
         On Error Resume Next
@@ -74,7 +74,7 @@ For i = 0 To tbl.Size - 1
         errNum = Err.Number
         On Error GoTo 0
         If errNum = 0 And IsArray(tmpPlot) Then
-            Set PlotDij = tmpPlot
+            PlotDij = tmpPlot
             Exit For
         End If
     Next
@@ -88,7 +88,7 @@ For i = 0 To tbl.Size - 1
             errNum = Err.Number
             On Error GoTo 0
         If errNum = 0 And IsArray(tmpPlot) Then
-            Set PlotDij = tmpPlot
+            PlotDij = tmpPlot
             Exit For
         End If
     Next
@@ -102,7 +102,7 @@ For i = 0 To tbl.Size - 1
             errNum = Err.Number
             On Error GoTo 0
         If errNum = 0 And IsArray(tmpPlot) Then
-            Set PlotDij = tmpPlot
+            PlotDij = tmpPlot
             Exit For
         End If
     Next
@@ -124,7 +124,7 @@ For i = 0 To tbl.Size - 1
     vetvName = branchData("name")
     nNACH = branchData("nNACH")
     nKON = branchData("nKON")
-    Set PlotDij = branchData("PlotDij")
+    PlotDij = branchData("PlotDij")
     
     ' Если массив получен
     If IsArray(PlotDij) Then
