@@ -235,10 +235,17 @@ wsResult.Columns.AutoFit
 
 ' Подсветка критических углов
 For r = 2 To resultRow - 1
-    If wsResult.Cells(r, 6).Value = "КРИТИЧЕСКИЙ dij (ЭЦК)" Then
-        wsResult.Range(wsResult.Cells(r, 1), wsResult.Cells(r, 6)).Interior.Color = RGB(255, 200, 200)
-        wsResult.Cells(r, 6).Font.Bold = True
+    On Error Resume Next
+    Dim cellVal
+    cellVal = wsResult.Cells(r, 6).Value
+    If Err.Number = 0 Then
+        If cellVal = "КРИТИЧЕСКИЙ dij (ЭЦК)" Then
+            wsResult.Range(wsResult.Cells(r, 1), wsResult.Cells(r, 6)).Interior.Color = RGB(255, 200, 200)
+            wsResult.Cells(r, 6).Font.Bold = True
+        End If
     End If
+    Err.Clear
+    On Error GoTo 0
 Next
 
 xl.ScreenUpdating = True
