@@ -14,6 +14,7 @@ Set spFWDynamic = Rastr.FWDynamic
 Set xl = CreateObject("Excel.Application")
 xl.Visible = True
 xl.DisplayAlerts = False
+xl.ScreenUpdating = False
 Set wb = xl.Workbooks.Add
 Set wsData = wb.Worksheets(1)
 wsData.Name = "Данные"
@@ -59,6 +60,8 @@ Dim allBranchData()
 ReDim allBranchData(tbl.Size - 1)
 
 Const MaxSnapshotIndex = 1005
+Dim cachedSnapIdx: cachedSnapIdx = -1  ' Кеш найденного индекса снимка
+Dim cachedParamName: cachedParamName = ""  ' Кеш названия параметра
 
 For i = 0 To tbl.Size - 1
     vetvName = colName.ZS(i)
@@ -68,16 +71,33 @@ For i = 0 To tbl.Size - 1
     ' Получаем снимки dij для ветви
     PlotDij = Empty
     Dim snapIdx, tmpPlot
-    For snapIdx = MaxSnapshotIndex To 0 Step -1
+    
+    ' Если уже нашли рабочий индекс - используем его
+    If cachedSnapIdx >= 0 Then
         On Error Resume Next
-        tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "dij", i, snapIdx)
+        tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", cachedParamName, i, cachedSnapIdx)
         errNum = Err.Number
         On Error GoTo 0
         If errNum = 0 And IsArray(tmpPlot) Then
             PlotDij = tmpPlot
-            Exit For
         End If
-    Next
+    End If
+    
+    ' Если кеш не помог или его нет - ищем индекс
+    If Not IsArray(PlotDij) Then
+        For snapIdx = MaxSnapshotIndex To 0 Step -1
+            On Error Resume Next
+            tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "dij", i, snapIdx)
+            errNum = Err.Number
+            On Error GoTo 0
+            If errNum = 0 And IsArray(tmpPlot) Then
+                PlotDij = tmpPlot
+                cachedSnapIdx = snapIdx
+                cachedParamName = "dij"
+                Exit For
+            End If
+        Next
+    End If
     
     ' Если не получили dij, попробуем альтернативные параметры
     If Not IsArray(PlotDij) Then
@@ -89,6 +109,8 @@ For i = 0 To tbl.Size - 1
             On Error GoTo 0
         If errNum = 0 And IsArray(tmpPlot) Then
             PlotDij = tmpPlot
+            cachedSnapIdx = snapIdx
+            cachedParamName = "Delta"
             Exit For
         End If
     Next
@@ -103,6 +125,8 @@ For i = 0 To tbl.Size - 1
             On Error GoTo 0
         If errNum = 0 And IsArray(tmpPlot) Then
             PlotDij = tmpPlot
+            cachedSnapIdx = snapIdx
+            cachedParamName = "d_angle"
             Exit For
         End If
     Next
@@ -200,6 +224,7 @@ For r = 2 To resultRow - 1
     End If
 Next
 
+xl.ScreenUpdating = True
 MsgBox "Анализ завершен! Проанализировано ветвей: " & (resultRow - 2), vbInformation, "Готово"
 
 On Error Resume Next
