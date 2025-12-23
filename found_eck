@@ -50,13 +50,14 @@ For ii = 0 To tbl.Size - 1
     End If
 Next
 
-If hasSelected Then
-    MsgBox "Найдено выделенных ветвей: " & selCount & vbCrLf & _
-           "Анализ будет выполнен только для них.", vbInformation, "Режим выделения"
-Else
-    MsgBox "Выделенных ветвей нет." & vbCrLf & _
-           "Анализ будет выполнен для ВСЕХ ветвей.", vbInformation, "Режим: все ветви"
+If Not hasSelected Then
+    xl.ScreenUpdating = True
+    MsgBox "Нет выделенных ветвей! Выделите ветви (sel) для анализа.", vbExclamation, "Нет выделения"
+    WScript.Quit
 End If
+
+MsgBox "Найдено выделенных ветвей: " & selCount & vbCrLf & _
+       "Анализ будет выполнен только для них.", vbInformation, "Режим выделения"
 
 ' === 1. ЗАПУСК ДИНАМИКИ ===
 urRes = SolveUR()
@@ -73,25 +74,18 @@ If dynRes <> 0 Then
     WScript.Quit
 End If
 
-' === 2. ВЫГРУЗКА ВСЕХ ДАННЫХ С DIJ ===
-' Собираем ТОЛЬКО ветви с критическими углами (>180°)
-Dim allBranchData()
-Dim criticalCount: criticalCount = 0
-
+' === 2. ВЫГРУЗКА ДАННЫХ ВЫДЕЛЕННЫХ ВЕТВЕЙ ===
 Const MaxSnapshotIndex = 1005
-Const CriticalAngle = 180  ' Критический угол в градусах
-Dim cachedSnapIdx: cachedSnapIdx = -1  ' Кеш найденного индекса снимка
-Dim cachedParamName: cachedParamName = ""  ' Кеш названия параметра
-
+Dim cachedSnapIdx: cachedSnapIdx = -1
+Dim cachedParamName: cachedParamName = ""
 Dim processedCount: processedCount = 0
 
 For i = 0 To tbl.Size - 1
-    ' Если есть выделенные ветви - работаем только с ними
-    If hasSelected And colSel.Z(i) = 0 Then
-        ' Пропускаем невыделенные ветви
+    ' Работаем только с выделенными ветвями
+    If colSel.Z(i) = 0 Then
+        ' Пропускаем невыделенные
     Else
     
-    processedCount = processedCount + 1
     vetvName = colName.ZS(i)
     nNACH = colIp.Z(i)
     nKON = colIq.Z(i)
@@ -111,7 +105,7 @@ For i = 0 To tbl.Size - 1
         End If
     End If
     
-    ' Если кеш не помог или его нет - ищем индекс
+    ' Если кеш не помог - ищем индекс
     If Not IsArray(PlotDij) Then
         For snapIdx = MaxSnapshotIndex To 0 Step -1
             On Error Resume Next
@@ -127,178 +121,106 @@ For i = 0 To tbl.Size - 1
         Next
     End If
     
-    ' Если не получили dij, попробуем альтернативные параметры
+    ' Пробуем Delta
     If Not IsArray(PlotDij) Then
-        ' Пробуем Delta
         For snapIdx = MaxSnapshotIndex To 0 Step -1
             On Error Resume Next
             tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "Delta", i, snapIdx)
             errNum = Err.Number
             On Error GoTo 0
-        If errNum = 0 And IsArray(tmpPlot) Then
-            PlotDij = tmpPlot
-            cachedSnapIdx = snapIdx
-            cachedParamName = "Delta"
-            Exit For
-        End If
-    Next
+            If errNum = 0 And IsArray(tmpPlot) Then
+                PlotDij = tmpPlot
+                cachedSnapIdx = snapIdx
+                cachedParamName = "Delta"
+                Exit For
+            End If
+        Next
     End If
     
-    ' Если всё ещё нет данных, попробуем d_angle
+    ' Пробуем d_angle
     If Not IsArray(PlotDij) Then
         For snapIdx = MaxSnapshotIndex To 0 Step -1
             On Error Resume Next
             tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "d_angle", i, snapIdx)
             errNum = Err.Number
             On Error GoTo 0
-        If errNum = 0 And IsArray(tmpPlot) Then
-            PlotDij = tmpPlot
-            cachedSnapIdx = snapIdx
-            cachedParamName = "d_angle"
-            Exit For
-        End If
-    Next
+            If errNum = 0 And IsArray(tmpPlot) Then
+                PlotDij = tmpPlot
+                cachedSnapIdx = snapIdx
+                cachedParamName = "d_angle"
+                Exit For
+            End If
+        Next
     End If
     
-    ' Проверяем, есть ли критический угол (>180°) в этой ветви
-    Dim isCritical: isCritical = False
-    Dim maxAbsAngle: maxAbsAngle = 0
-    
+    ' === ВЫГРУЗКА В EXCEL (без ручного обхода массива) ===
     If IsArray(PlotDij) Then
+        dijCol = dataCol
+        timeCol = dataCol + 1
+        checkCol = dataCol + 2
+        
+        ' Заголовки на листе данных
+        wsData.Cells(1, dijCol).Value = vetvName & " (dij)"
+        wsData.Cells(1, timeCol).Value = vetvName & " (Time)"
+        wsData.Cells(1, checkCol).Value = vetvName & " (>180)"
+        
+        ' Запись массива dij как есть - Excel сам разберётся
         On Error Resume Next
-        Dim arrDims, arrUB, arrLB1, arrLB2
-        arrDims = 0
-        arrUB = UBound(PlotDij, 2)
-        If Err.Number = 0 Then arrDims = 2 Else arrDims = 1
-        Err.Clear
+        wsData.Cells(2, dijCol).Value = PlotDij
+        If Err.Number <> 0 Then
+            ' Если не получилось напрямую - попробуем через Transpose
+            Err.Clear
+            wsData.Cells(2, dijCol).Value = xl.WorksheetFunction.Transpose(PlotDij)
+        End If
         On Error GoTo 0
         
-        Dim j
-        If arrDims = 2 Then
-            ' Двумерный массив (строки, столбцы)
-            arrLB1 = LBound(PlotDij, 1)
-            arrLB2 = LBound(PlotDij, 2)
-            For j = arrLB1 To UBound(PlotDij, 1)
-                If Abs(PlotDij(j, arrLB2)) > maxAbsAngle Then
-                    maxAbsAngle = Abs(PlotDij(j, arrLB2))
-                End If
-            Next
-        Else
-            ' Одномерный массив
-            arrLB1 = LBound(PlotDij)
-            For j = arrLB1 To UBound(PlotDij)
-                If Abs(PlotDij(j)) > maxAbsAngle Then
-                    maxAbsAngle = Abs(PlotDij(j))
-                End If
-            Next
-        End If
-        
-        If maxAbsAngle > CriticalAngle Then
-            isCritical = True
-        End If
-    End If
-    
-    ' Сохраняем ТОЛЬКО критические ветви
-    If isCritical Then
-        ReDim Preserve allBranchData(criticalCount)
-        Set branchData = CreateObject("Scripting.Dictionary")
-        branchData.Add "name", vetvName
-        branchData.Add "nNACH", nNACH
-        branchData.Add "nKON", nKON
-        branchData.Add "PlotDij", PlotDij
-        branchData.Add "maxAngle", maxAbsAngle
-        branchData.Add "arrDims", arrDims
-        Set allBranchData(criticalCount) = branchData
-        criticalCount = criticalCount + 1
-    End If
-    
-    End If ' Конец проверки sel
-Next
-
-' === 3. АНАЛИЗ И ВЫГРУЗКА КРИТИЧЕСКИХ ДАННЫХ ===
-' Выгружаем только ветви с критическими углами
-If criticalCount = 0 Then
-    wsResult.Cells(resultRow, 1).Value = "Критических углов не обнаружено"
-    wsResult.Cells(resultRow, 6).Value = "ВСЕ В НОРМЕ"
-    xl.ScreenUpdating = True
-    MsgBox "Критических углов (>180°) не обнаружено!", vbInformation, "Готово"
-    WScript.Quit
-End If
-
-For i = 0 To criticalCount - 1
-    Set branchData = allBranchData(i)
-    vetvName = branchData("name")
-    nNACH = branchData("nNACH")
-    nKON = branchData("nKON")
-    PlotDij = branchData("PlotDij")
-    Dim curArrDims: curArrDims = branchData("arrDims")
-    
-    If IsArray(PlotDij) Then
-        If curArrDims = 2 Then
-            npoints = UBound(PlotDij, 1) - LBound(PlotDij, 1) + 1
-        Else
-            npoints = UBound(PlotDij) - LBound(PlotDij) + 1
-        End If
+        ' Определяем сколько строк записалось
+        npoints = wsData.Cells(wsData.Rows.Count, dijCol).End(-4162).Row - 1  ' -4162 = xlUp
         
         If npoints > 0 Then
-            dijCol = dataCol
-            timeCol = dataCol + 1
-            checkCol = dataCol + 2
-            
-            ' Заголовки на листе данных
-            wsData.Cells(1, dijCol).Value = vetvName & " (dij)"
-            wsData.Cells(1, timeCol).Value = vetvName & " (Time)"
-            wsData.Cells(1, checkCol).Value = vetvName & " (>180)"
-            
-            ' Запись массива dij (угол, время)
-            wsData.Cells(2, dijCol).Resize(npoints, 2).Value = PlotDij
-            
             ' Формула проверки критического значения
             wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(ABS(RC" & dijCol & ")>180,ROW(),999999)"
             
             ' Диапазоны для формул
-            dijStartAddr = wsData.Cells(2, dijCol).Address(False, False, 1, True)
-            dijEndAddr = wsData.Cells(npoints + 1, dijCol).Address(False, False, 1, True)
-            dijRange = dijStartAddr & ":" & dijEndAddr
+            dijRange = wsData.Cells(2, dijCol).Address(False, False, 1, True) & ":" & _
+                       wsData.Cells(npoints + 1, dijCol).Address(False, False, 1, True)
+            timeRange = wsData.Cells(2, timeCol).Address(False, False, 1, True) & ":" & _
+                        wsData.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
+            checkRange = wsData.Cells(2, checkCol).Address(False, False, 1, True) & ":" & _
+                         wsData.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
             
-            timeStartAddr = wsData.Cells(2, timeCol).Address(False, False, 1, True)
-            timeEndAddr = wsData.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
-            timeRange = timeStartAddr & ":" & timeEndAddr
-            
-            checkStartAddr = wsData.Cells(2, checkCol).Address(False, False, 1, True)
-            checkEndAddr = wsData.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
-            checkRange = checkStartAddr & ":" & checkEndAddr
-            
-            ' === 4. ЗАПИСЬ РЕЗУЛЬТАТОВ ===
+            ' Запись в лист результатов
             wsResult.Cells(resultRow, 1).Value = vetvName
-            wsResult.Cells(resultRow, 2).Value = nNACH         ' N нач
-            wsResult.Cells(resultRow, 3).Value = nKON          ' N кон
+            wsResult.Cells(resultRow, 2).Value = nNACH
+            wsResult.Cells(resultRow, 3).Value = nKON
             wsResult.Cells(resultRow, 4).Formula = "=MAX(ABS(" & dijRange & "))"
             wsResult.Cells(resultRow, 5).Formula = "=IF(AND(MAX(ABS(" & dijRange & "))>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
             wsResult.Cells(resultRow, 6).Formula = "=IF(MAX(ABS(" & dijRange & "))>180,""КРИТИЧЕСКИЙ dij (ЭЦК)"",""Норма"")"
             
             resultRow = resultRow + 1
             dataCol = dataCol + 3
+            processedCount = processedCount + 1
         End If
     Else
-        ' Если не удалось получить данные для ветви
+        ' Нет данных для ветви
         wsResult.Cells(resultRow, 1).Value = vetvName
         wsResult.Cells(resultRow, 2).Value = nNACH
         wsResult.Cells(resultRow, 3).Value = nKON
         wsResult.Cells(resultRow, 4).Value = "Нет данных"
         wsResult.Cells(resultRow, 5).Value = ""
-        wsResult.Cells(resultRow, 6).Value = "ОШИБКА: нет данных динамики"
+        wsResult.Cells(resultRow, 6).Value = "ОШИБКА: нет данных"
         resultRow = resultRow + 1
+        processedCount = processedCount + 1
     End If
+    
+    End If ' Конец проверки sel
 Next
 
 ' === ФИНАЛИЗАЦИЯ ===
-' Пересчет и фиксация результатов
 xl.Calculate
 wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value = _
     wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value
 
-' Форматирование
 wsData.Columns.AutoFit
 wsResult.Columns.AutoFit
 
@@ -310,14 +232,9 @@ For r = 2 To resultRow - 1
     End If
 Next
 
-Dim modeText
-If hasSelected Then modeText = " (выделенные)" Else modeText = " (все)"
-
 xl.ScreenUpdating = True
 MsgBox "Анализ завершен!" & vbCrLf & _
-       "Всего ветвей в модели: " & tbl.Size & vbCrLf & _
-       "Обработано: " & processedCount & modeText & vbCrLf & _
-       "Критических (>180°): " & criticalCount, vbInformation, "Готово"
+       "Обработано ветвей: " & processedCount, vbInformation, "Готово"
 
 On Error Resume Next
 xl.DisplayAlerts = True
