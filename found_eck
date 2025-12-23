@@ -1,5 +1,17 @@
-' Запуск динамики
+' Настройка снимков перед расчетом
 Set spFWDynamic = Rastr.FWDynamic
+
+' ВАЖНО: Настраиваем сохранение снимков для ветвей
+Set MacroControl = spFWDynamic.MacroControl
+
+' Добавляем параметры для сохранения в снимки
+MacroControl.AddParameter "vetv", "d_ip"
+MacroControl.AddParameter "vetv", "d_iq"
+
+' ИЛИ можно добавить все параметры ветвей:
+' MacroControl.AddTable "vetv"
+
+' Запуск динамики
 spFWDynamic.Run()
 
 ' Инициализация Excel
