@@ -197,9 +197,10 @@ For i = 0 To tbl.Size - 1
             wsResult.Cells(resultRow, 1).Value = vetvName
             wsResult.Cells(resultRow, 2).Value = nNACH
             wsResult.Cells(resultRow, 3).Value = nKON
-            wsResult.Cells(resultRow, 4).Formula = "=MAX(ABS(" & dijRange & "))"
-            wsResult.Cells(resultRow, 5).Formula = "=IF(AND(MAX(ABS(" & dijRange & "))>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
-            wsResult.Cells(resultRow, 6).Formula = "=IF(MAX(ABS(" & dijRange & "))>180,""КРИТИЧЕСКИЙ dij (ЭЦК)"",""Норма"")"
+            ' MAX абсолютного значения = MAX(макс, -мин)
+            wsResult.Cells(resultRow, 4).Formula = "=MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))"
+            wsResult.Cells(resultRow, 5).Formula = "=IF(AND(MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+            wsResult.Cells(resultRow, 6).Formula = "=IF(MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))>180,""КРИТИЧЕСКИЙ dij (ЭЦК)"",""Норма"")"
             
             resultRow = resultRow + 1
             dataCol = dataCol + 3
