@@ -166,7 +166,7 @@ For i = 0 To tbl.Size - 1
     
     If IsArray(PlotDij) Then
         On Error Resume Next
-        Dim arrDims, arrUB
+        Dim arrDims, arrUB, arrLB1, arrLB2
         arrDims = 0
         arrUB = UBound(PlotDij, 2)
         If Err.Number = 0 Then arrDims = 2 Else arrDims = 1
@@ -176,14 +176,17 @@ For i = 0 To tbl.Size - 1
         Dim j
         If arrDims = 2 Then
             ' Двумерный массив (строки, столбцы)
-            For j = 0 To UBound(PlotDij, 1)
-                If Abs(PlotDij(j, 0)) > maxAbsAngle Then
-                    maxAbsAngle = Abs(PlotDij(j, 0))
+            arrLB1 = LBound(PlotDij, 1)
+            arrLB2 = LBound(PlotDij, 2)
+            For j = arrLB1 To UBound(PlotDij, 1)
+                If Abs(PlotDij(j, arrLB2)) > maxAbsAngle Then
+                    maxAbsAngle = Abs(PlotDij(j, arrLB2))
                 End If
             Next
         Else
             ' Одномерный массив
-            For j = 0 To UBound(PlotDij)
+            arrLB1 = LBound(PlotDij)
+            For j = arrLB1 To UBound(PlotDij)
                 If Abs(PlotDij(j)) > maxAbsAngle Then
                     maxAbsAngle = Abs(PlotDij(j))
                 End If
@@ -232,9 +235,9 @@ For i = 0 To criticalCount - 1
     
     If IsArray(PlotDij) Then
         If curArrDims = 2 Then
-            npoints = UBound(PlotDij, 1) + 1
+            npoints = UBound(PlotDij, 1) - LBound(PlotDij, 1) + 1
         Else
-            npoints = UBound(PlotDij) + 1
+            npoints = UBound(PlotDij) - LBound(PlotDij) + 1
         End If
         
         If npoints > 0 Then
