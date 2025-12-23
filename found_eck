@@ -38,6 +38,25 @@ Set tbl = Rastr.Tables("vetv")
 Set colName = tbl.Cols("name")
 Set colIp = tbl.Cols("ip")    ' Номер узла начала
 Set colIq = tbl.Cols("iq")    ' Номер узла конца
+Set colSel = tbl.Cols("sel")  ' Выделение ветви
+
+' Проверяем, есть ли выделенные ветви
+Dim hasSelected: hasSelected = False
+Dim selCount: selCount = 0
+For ii = 0 To tbl.Size - 1
+    If colSel.Z(ii) <> 0 Then
+        hasSelected = True
+        selCount = selCount + 1
+    End If
+Next
+
+If hasSelected Then
+    MsgBox "Найдено выделенных ветвей: " & selCount & vbCrLf & _
+           "Анализ будет выполнен только для них.", vbInformation, "Режим выделения"
+Else
+    MsgBox "Выделенных ветвей нет." & vbCrLf & _
+           "Анализ будет выполнен для ВСЕХ ветвей.", vbInformation, "Режим: все ветви"
+End If
 
 ' === 1. ЗАПУСК ДИНАМИКИ ===
 urRes = SolveUR()
@@ -55,15 +74,24 @@ If dynRes <> 0 Then
 End If
 
 ' === 2. ВЫГРУЗКА ВСЕХ ДАННЫХ С DIJ ===
-' Сначала собираем ВСЕ данные из динамики в структурированном виде
+' Собираем ТОЛЬКО ветви с критическими углами (>180°)
 Dim allBranchData()
-ReDim allBranchData(tbl.Size - 1)
+Dim criticalCount: criticalCount = 0
 
 Const MaxSnapshotIndex = 1005
+Const CriticalAngle = 180  ' Критический угол в градусах
 Dim cachedSnapIdx: cachedSnapIdx = -1  ' Кеш найденного индекса снимка
 Dim cachedParamName: cachedParamName = ""  ' Кеш названия параметра
 
+Dim processedCount: processedCount = 0
+
 For i = 0 To tbl.Size - 1
+    ' Если есть выделенные ветви - работаем только с ними
+    If hasSelected And colSel.Z(i) = 0 Then
+        ' Пропускаем невыделенные ветви
+    Else
+    
+    processedCount = processedCount + 1
     vetvName = colName.ZS(i)
     nNACH = colIp.Z(i)
     nKON = colIq.Z(i)
@@ -132,25 +160,55 @@ For i = 0 To tbl.Size - 1
     Next
     End If
     
-    ' Сохраняем данные ветви
-    Set branchData = CreateObject("Scripting.Dictionary")
-    branchData.Add "name", vetvName
-    branchData.Add "nNACH", nNACH
-    branchData.Add "nKON", nKON
-    branchData.Add "PlotDij", PlotDij
-    Set allBranchData(i) = branchData
+    ' Проверяем, есть ли критический угол (>180°) в этой ветви
+    Dim isCritical: isCritical = False
+    Dim maxAbsAngle: maxAbsAngle = 0
+    
+    If IsArray(PlotDij) Then
+        Dim j
+        For j = 0 To UBound(PlotDij, 1)
+            If Abs(PlotDij(j, 0)) > maxAbsAngle Then
+                maxAbsAngle = Abs(PlotDij(j, 0))
+            End If
+        Next
+        If maxAbsAngle > CriticalAngle Then
+            isCritical = True
+        End If
+    End If
+    
+    ' Сохраняем ТОЛЬКО критические ветви
+    If isCritical Then
+        ReDim Preserve allBranchData(criticalCount)
+        Set branchData = CreateObject("Scripting.Dictionary")
+        branchData.Add "name", vetvName
+        branchData.Add "nNACH", nNACH
+        branchData.Add "nKON", nKON
+        branchData.Add "PlotDij", PlotDij
+        branchData.Add "maxAngle", maxAbsAngle
+        Set allBranchData(criticalCount) = branchData
+        criticalCount = criticalCount + 1
+    End If
+    
+    End If ' Конец проверки sel
 Next
 
-' === 3. АНАЛИЗ ВЫГРУЖЕННЫХ ДАННЫХ ===
-' Теперь анализируем собранные данные
-For i = 0 To tbl.Size - 1
+' === 3. АНАЛИЗ И ВЫГРУЗКА КРИТИЧЕСКИХ ДАННЫХ ===
+' Выгружаем только ветви с критическими углами
+If criticalCount = 0 Then
+    wsResult.Cells(resultRow, 1).Value = "Критических углов не обнаружено"
+    wsResult.Cells(resultRow, 6).Value = "ВСЕ В НОРМЕ"
+    xl.ScreenUpdating = True
+    MsgBox "Критических углов (>180°) не обнаружено!", vbInformation, "Готово"
+    WScript.Quit
+End If
+
+For i = 0 To criticalCount - 1
     Set branchData = allBranchData(i)
     vetvName = branchData("name")
     nNACH = branchData("nNACH")
     nKON = branchData("nKON")
     PlotDij = branchData("PlotDij")
     
-    ' Если массив получен
     If IsArray(PlotDij) Then
         npoints = UBound(PlotDij, 1) + 1
         
@@ -224,8 +282,14 @@ For r = 2 To resultRow - 1
     End If
 Next
 
+Dim modeText
+If hasSelected Then modeText = " (выделенные)" Else modeText = " (все)"
+
 xl.ScreenUpdating = True
-MsgBox "Анализ завершен! Проанализировано ветвей: " & (resultRow - 2), vbInformation, "Готово"
+MsgBox "Анализ завершен!" & vbCrLf & _
+       "Всего ветвей в модели: " & tbl.Size & vbCrLf & _
+       "Обработано: " & processedCount & modeText & vbCrLf & _
+       "Критических (>180°): " & criticalCount, vbInformation, "Готово"
 
 On Error Resume Next
 xl.DisplayAlerts = True
