@@ -1,14 +1,6 @@
 ' Запуск динамики
 Set spFWDynamic = Rastr.FWDynamic
-If spFWDynamic Is Nothing Then
-    MsgBox "FWDynamic не доступен", vbCritical
-    Exit Sub
-End If
-
-If spFWDynamic.Run() <> 0 Then
-    MsgBox "Ошибка расчета FWDynamic", vbCritical
-    Exit Sub
-End If
+spFWDynamic.Run()
 
 ' Создаем Excel
 Set xl = CreateObject("Excel.Application")
@@ -32,25 +24,12 @@ wsResult.Range(wsResult.Cells(1, 1), wsResult.Cells(1, 6)).Font.Bold = True
 resultRow = 2
 
 ' Получаем таблицу ветвей
-On Error Resume Next
 Set tbl = Rastr.Tables("vetv")
-If Err.Number <> 0 Or tbl Is Nothing Then
-    MsgBox "Таблица vetv недоступна", vbCritical
-    Exit Sub
-End If
-On Error GoTo 0
-
-Set colName = tbl.Cols("name")
-Set colNp = tbl.Cols("np")
-Set colNq = tbl.Cols("nq")
 
 Const MaxSnapshotIndex = 500
 
 ' Проходим по всем ветвям
 For i = 0 To tbl.Size - 1
-    vetvName = colName.ZS(i)
-    np_val = colNp.Z(i)
-    nq_val = colNq.Z(i)
     
     ' Получаем снимки Dнач и Dкон
     Set PlotDnach = Nothing
@@ -85,11 +64,11 @@ For i = 0 To tbl.Size - 1
             dataCol = (i * 5) + 1
             
             ' Записываем данные на лист wsData
-            wsData.Cells(1, dataCol).Value = vetvName & " (Dнач)"
-            wsData.Cells(1, dataCol + 1).Value = vetvName & " (Time Dнач)"
-            wsData.Cells(1, dataCol + 2).Value = vetvName & " (Dкон)"
-            wsData.Cells(1, dataCol + 3).Value = vetvName & " (Взаимный угол)"
-            wsData.Cells(1, dataCol + 4).Value = vetvName & " (>180)"
+            wsData.Cells(1, dataCol).Value = "Ветвь_" & i & " (Dнач)"
+            wsData.Cells(1, dataCol + 1).Value = "Ветвь_" & i & " (Time)"
+            wsData.Cells(1, dataCol + 2).Value = "Ветвь_" & i & " (Dкон)"
+            wsData.Cells(1, dataCol + 3).Value = "Ветвь_" & i & " (Взаимный угол)"
+            wsData.Cells(1, dataCol + 4).Value = "Ветвь_" & i & " (>180)"
             
             ' Записываем массивы Dнач и Dкон
             wsData.Cells(2, dataCol).Resize(npoints, 2).Value = PlotDnach
@@ -115,9 +94,9 @@ For i = 0 To tbl.Size - 1
             checkRange = checkStartAddr & ":" & checkEndAddr
             
             ' Записываем формулы в результирующий лист
-            wsResult.Cells(resultRow, 1).Value = vetvName
-            wsResult.Cells(resultRow, 2).Value = np_val
-            wsResult.Cells(resultRow, 3).Value = nq_val
+            wsResult.Cells(resultRow, 1).Value = "Ветвь_" & i
+            wsResult.Cells(resultRow, 2).Value = i
+            wsResult.Cells(resultRow, 3).Value = ""
             wsResult.Cells(resultRow, 4).Formula = "=MAX(" & vzaimRange & ")"
             wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & vzaimRange & ")>180,INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
             wsResult.Cells(resultRow, 6).Formula = "=IF(MAX(" & vzaimRange & ")>180,""КРИТИЧЕСКИЙ УГОЛ (ЭЦК)"",""Норма"")"
