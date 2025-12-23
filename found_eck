@@ -2,7 +2,7 @@
 Set spFWDynamic = Rastr.FWDynamic
 spFWDynamic.Run()
 
-' Создаем Excel
+' Инициализация Excel
 Set xl = CreateObject("Excel.Application")
 xl.Visible = True
 xl.DisplayAlerts = False
@@ -14,45 +14,49 @@ wsResult.Name = "Критические углы"
 
 ' Заголовки результирующего листа
 wsResult.Cells(1, 1).Value = "Ветвь"
-wsResult.Cells(1, 2).Value = "Узел начала"
-wsResult.Cells(1, 3).Value = "Узел конца"
-wsResult.Cells(1, 4).Value = "Max взаимный угол"
-wsResult.Cells(1, 5).Value = "Время критического угла"
-wsResult.Cells(1, 6).Value = "Статус"
-wsResult.Range(wsResult.Cells(1, 1), wsResult.Cells(1, 6)).Font.Bold = True
+wsResult.Cells(1, 2).Value = "Max взаимный угол"
+wsResult.Cells(1, 3).Value = "Время критического угла"
+wsResult.Cells(1, 4).Value = "Статус"
+wsResult.Range(wsResult.Cells(1, 1), wsResult.Cells(1, 4)).Font.Bold = True
 
-resultRow = 2
+Dim resultRow: resultRow = 2
+Const MaxSnapshotIndex = 500
 
 ' Получаем таблицу ветвей
 Set tbl = Rastr.Tables("vetv")
+Set colName = tbl.Cols("name")
 
-Const MaxSnapshotIndex = 500
+Dim dataCol: dataCol = 1
 
 ' Проходим по всем ветвям
 For i = 0 To tbl.Size - 1
+    vetvName = colName.ZS(i)
     
-    ' Получаем снимки Dнач и Dкон
+    ' Получаем снимки Dнач
     Set PlotDnach = Nothing
-    Set PlotDkon = Nothing
-    
+    Dim snapIdx, tmpPlot
     For snapIdx = MaxSnapshotIndex To 0 Step -1
         On Error Resume Next
         tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "Dнач", i, snapIdx)
-        If Err.Number = 0 And IsArray(tmpPlot) Then
+        errNum = Err.Number
+        On Error GoTo 0
+        If errNum = 0 And IsArray(tmpPlot) Then
             PlotDnach = tmpPlot
             Exit For
         End If
-        On Error GoTo 0
     Next
     
+    ' Получаем снимки Dкон
+    Set PlotDkon = Nothing
     For snapIdx = MaxSnapshotIndex To 0 Step -1
         On Error Resume Next
         tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "Dкон", i, snapIdx)
-        If Err.Number = 0 And IsArray(tmpPlot) Then
+        errNum = Err.Number
+        On Error GoTo 0
+        If errNum = 0 And IsArray(tmpPlot) Then
             PlotDkon = tmpPlot
             Exit For
         End If
-        On Error GoTo 0
     Next
     
     ' Если оба массива получены
@@ -60,56 +64,62 @@ For i = 0 To tbl.Size - 1
         npoints = UBound(PlotDnach, 1) + 1
         
         If npoints > 0 Then
-            ' Колонки для данных текущей ветви
-            dataCol = (i * 5) + 1
+            dnachCol = dataCol
+            timeCol = dataCol + 1
+            dkonCol = dataCol + 2
+            vzaimCol = dataCol + 3
+            checkCol = dataCol + 4
             
-            ' Записываем данные на лист wsData
-            wsData.Cells(1, dataCol).Value = "Ветвь_" & i & " (Dнач)"
-            wsData.Cells(1, dataCol + 1).Value = "Ветвь_" & i & " (Time)"
-            wsData.Cells(1, dataCol + 2).Value = "Ветвь_" & i & " (Dкон)"
-            wsData.Cells(1, dataCol + 3).Value = "Ветвь_" & i & " (Взаимный угол)"
-            wsData.Cells(1, dataCol + 4).Value = "Ветвь_" & i & " (>180)"
+            ' Заголовки на листе данных
+            wsData.Cells(1, dnachCol).Value = vetvName & " (Dнач)"
+            wsData.Cells(1, timeCol).Value = vetvName & " (Time)"
+            wsData.Cells(1, dkonCol).Value = vetvName & " (Dкон)"
+            wsData.Cells(1, vzaimCol).Value = vetvName & " (Взаимный)"
+            wsData.Cells(1, checkCol).Value = vetvName & " (>180)"
             
-            ' Записываем массивы Dнач и Dкон
-            wsData.Cells(2, dataCol).Resize(npoints, 2).Value = PlotDnach
-            wsData.Cells(2, dataCol + 2).Resize(npoints, 1).Value = Application.Index(PlotDkon, 0, 1)
+            ' Запись массива Dнач (Delta, Time)
+            wsData.Cells(2, dnachCol).Resize(npoints, 2).Value = PlotDnach
             
-            ' Формула для вычисления взаимного угла
-            wsData.Cells(2, dataCol + 3).Resize(npoints, 1).FormulaR1C1 = "=ABS(RC" & dataCol & "-RC" & (dataCol + 2) & ")"
+            ' Запись массива Dкон (только Delta)
+            For r = 0 To npoints - 1
+                wsData.Cells(r + 2, dkonCol).Value = PlotDkon(r, 0)
+            Next
             
-            ' Формула: если взаимный угол > 180, то номер строки, иначе 999999
-            wsData.Cells(2, dataCol + 4).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & (dataCol + 3) & ">180,ROW(),999999)"
+            ' Формула взаимного угла
+            wsData.Cells(2, vzaimCol).Resize(npoints, 1).FormulaR1C1 = "=ABS(RC" & dnachCol & "-RC" & dkonCol & ")"
             
-            ' Диапазоны для формул
-            vzaimStartAddr = wsData.Cells(2, dataCol + 3).Address(False, False, 1, True)
-            vzaimEndAddr = wsData.Cells(npoints + 1, dataCol + 3).Address(False, False, 1, True)
+            ' Вспомогательная колонка: если взаимный угол > 180, то номер строки
+            wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & vzaimCol & ">180,ROW(),999999)"
+            
+            ' Диапазоны
+            vzaimStartAddr = wsData.Cells(2, vzaimCol).Address(False, False, 1, True)
+            vzaimEndAddr = wsData.Cells(npoints + 1, vzaimCol).Address(False, False, 1, True)
             vzaimRange = vzaimStartAddr & ":" & vzaimEndAddr
             
-            timeStartAddr = wsData.Cells(2, dataCol + 1).Address(False, False, 1, True)
-            timeEndAddr = wsData.Cells(npoints + 1, dataCol + 1).Address(False, False, 1, True)
+            timeStartAddr = wsData.Cells(2, timeCol).Address(False, False, 1, True)
+            timeEndAddr = wsData.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
             timeRange = timeStartAddr & ":" & timeEndAddr
             
-            checkStartAddr = wsData.Cells(2, dataCol + 4).Address(False, False, 1, True)
-            checkEndAddr = wsData.Cells(npoints + 1, dataCol + 4).Address(False, False, 1, True)
+            checkStartAddr = wsData.Cells(2, checkCol).Address(False, False, 1, True)
+            checkEndAddr = wsData.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
             checkRange = checkStartAddr & ":" & checkEndAddr
             
-            ' Записываем формулы в результирующий лист
-            wsResult.Cells(resultRow, 1).Value = "Ветвь_" & i
-            wsResult.Cells(resultRow, 2).Value = i
-            wsResult.Cells(resultRow, 3).Value = ""
-            wsResult.Cells(resultRow, 4).Formula = "=MAX(" & vzaimRange & ")"
-            wsResult.Cells(resultRow, 5).Formula = "=IF(MAX(" & vzaimRange & ")>180,INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
-            wsResult.Cells(resultRow, 6).Formula = "=IF(MAX(" & vzaimRange & ")>180,""КРИТИЧЕСКИЙ УГОЛ (ЭЦК)"",""Норма"")"
+            ' Запись формул в результирующий лист
+            wsResult.Cells(resultRow, 1).Value = vetvName
+            wsResult.Cells(resultRow, 2).Formula = "=MAX(" & vzaimRange & ")"
+            wsResult.Cells(resultRow, 3).Formula = "=IF(AND(MAX(" & vzaimRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+            wsResult.Cells(resultRow, 4).Formula = "=IF(MAX(" & vzaimRange & ")>180,""КРИТИЧЕСКИЙ УГОЛ (ЭЦК)"",""Норма"")"
             
             resultRow = resultRow + 1
+            dataCol = dataCol + 5
         End If
     End If
 Next
 
 ' Пересчет и фиксация результатов
 xl.Calculate
-wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value = _
-    wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value
+wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 4)).Value = _
+    wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 4)).Value
 
 ' Форматирование
 wsData.Columns.AutoFit
@@ -117,17 +127,10 @@ wsResult.Columns.AutoFit
 
 ' Подсветка критических углов
 For r = 2 To resultRow - 1
-    If wsResult.Cells(r, 6).Value = "КРИТИЧЕСКИЙ УГОЛ (ЭЦК)" Then
-        wsResult.Range(wsResult.Cells(r, 1), wsResult.Cells(r, 6)).Interior.Color = RGB(255, 200, 200)
-        wsResult.Cells(r, 6).Font.Bold = True
+    If wsResult.Cells(r, 4).Value = "КРИТИЧЕСКИЙ УГОЛ (ЭЦК)" Then
+        wsResult.Range(wsResult.Cells(r, 1), wsResult.Cells(r, 4)).Interior.Color = RGB(255, 200, 200)
+        wsResult.Cells(r, 4).Font.Bold = True
     End If
 Next
 
-criticalCount = 0
-For r = 2 To resultRow - 1
-    If wsResult.Cells(r, 6).Value = "КРИТИЧЕСКИЙ УГОЛ (ЭЦК)" Then
-        criticalCount = criticalCount + 1
-    End If
-Next
-
-MsgBox "Анализ завершен!" & vbCrLf & "Обнаружено критических углов (ЭЦК): " & criticalCount, vbInformation
+MsgBox "Анализ завершен!", vbInformation, "Готово"
