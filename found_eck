@@ -102,6 +102,10 @@ For i = 0 To tbl.Size - 1
         On Error GoTo 0
         If errNum = 0 And IsArray(tmpPlot) Then
             PlotDij = tmpPlot
+        Else
+            ' Кеш не сработал для этой ветви - сбрасываем
+            cachedSnapIdx = -1
+            cachedParamName = ""
         End If
     End If
     
