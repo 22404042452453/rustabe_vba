@@ -223,8 +223,12 @@ Next
 
 ' === ФИНАЛИЗАЦИЯ ===
 xl.Calculate
-wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value = _
-    wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value
+
+' Фиксация результатов (только если есть данные)
+If resultRow > 2 Then
+    wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value = _
+        wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value
+End If
 
 wsData.Columns.AutoFit
 wsResult.Columns.AutoFit
