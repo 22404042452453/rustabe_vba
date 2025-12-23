@@ -7,39 +7,35 @@ Set xl = CreateObject("Excel.Application")
 xl.Visible = True
 Set wb = xl.Workbooks.Add
 Set ws = wb.Worksheets(1)
-ws.Name = "Диагностика"
+ws.Name = "Тест снимков"
 
-' Проверка 1: Таблица vetv
-Set tbl = Rastr.Tables("vetv")
-ws.Cells(1, 1).Value = "Размер таблицы vetv:"
-ws.Cells(1, 2).Value = tbl.Size
-
-' Проверка 2: Проверяем первую ветвь
-ws.Cells(3, 1).Value = "Проверка ветви 0:"
+ws.Cells(1, 1).Value = "Проверка снимков d_ip для ветви 0:"
 
 Const MaxSnapshotIndex = 500
-foundSnapshot = False
 
-For snapIdx = MaxSnapshotIndex To 0 Step -1
+' Пробуем получить снимок d_ip
+foundSnapshot = False
+For snapIdx = 0 To MaxSnapshotIndex
     On Error Resume Next
-    tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "Dнач", 0, snapIdx)
+    tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "d_ip", 0, snapIdx)
     errNum = Err.Number
     On Error GoTo 0
     
     If errNum = 0 And IsArray(tmpPlot) Then
-        ws.Cells(4, 1).Value = "Снимок найден на индексе:"
-        ws.Cells(4, 2).Value = snapIdx
-        ws.Cells(5, 1).Value = "Количество точек:"
-        ws.Cells(5, 2).Value = UBound(tmpPlot, 1) + 1
+        ws.Cells(2, 1).Value = "Снимок " & snapIdx & " найден!"
+        ws.Cells(3, 1).Value = "Точек данных:"
+        ws.Cells(3, 2).Value = UBound(tmpPlot, 1) + 1
         
-        ' Выводим первые 5 точек
-        ws.Cells(7, 1).Value = "Первые 5 точек (Dнач, Time):"
+        ' Выводим первые 10 точек
+        ws.Cells(5, 1).Value = "d_ip"
+        ws.Cells(5, 2).Value = "Time"
+        
         maxRows = UBound(tmpPlot, 1) + 1
-        If maxRows > 5 Then maxRows = 5
+        If maxRows > 10 Then maxRows = 10
         
         For r = 0 To maxRows - 1
-            ws.Cells(8 + r, 1).Value = tmpPlot(r, 0)
-            ws.Cells(8 + r, 2).Value = tmpPlot(r, 1)
+            ws.Cells(6 + r, 1).Value = tmpPlot(r, 0)
+            ws.Cells(6 + r, 2).Value = tmpPlot(r, 1)
         Next
         
         foundSnapshot = True
@@ -48,19 +44,11 @@ For snapIdx = MaxSnapshotIndex To 0 Step -1
 Next
 
 If Not foundSnapshot Then
-    ws.Cells(4, 1).Value = "СНИМОК НЕ НАЙДЕН!"
-    ws.Cells(5, 1).Value = "Возможные причины:"
-    ws.Cells(6, 1).Value = "1. Динамика не запустилась"
-    ws.Cells(7, 1).Value = "2. Нет данных Dнач"
-    ws.Cells(8, 1).Value = "3. Неправильное имя таблицы/колонки"
+    ws.Cells(2, 1).Value = "НИ ОДИН СНИМОК НЕ НАЙДЕН!"
+    ws.Cells(3, 1).Value = "Проверьте:"
+    ws.Cells(4, 1).Value = "1. Выполнился ли расчет динамики (есть ли сообщения в протоколе)?"
+    ws.Cells(5, 1).Value = "2. Сохраняются ли снимки (настройки динамики)?"
 End If
 
-' Проверка 3: Список доступных колонок
-ws.Cells(14, 1).Value = "Доступные колонки в vetv:"
-Set cols = tbl.Cols
-For i = 0 To cols.Count - 1
-    ws.Cells(15 + i, 1).Value = cols.Item(i).Name
-Next
-
 ws.Columns.AutoFit
-MsgBox "Диагностика завершена. Проверьте лист!"
+MsgBox "Проверка завершена!"
