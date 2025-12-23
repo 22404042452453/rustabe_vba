@@ -177,22 +177,23 @@ For i = 0 To tbl.Size - 1
         
         Dim npoints: npoints = 0
         Dim rowIdx: rowIdx = 2
+        Dim k ' Переменная для циклов
         
         If is2D Then
             ' Двумерный массив: определяем ориентацию
             If (ub2 - lb2 + 1) = 2 Then
                 ' Массив вида (n, 2) - каждая строка: угол, время
-                For j = lb1 To ub1
-                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(j, lb2)      ' dij
-                    wsData.Cells(rowIdx, timeCol).Value = PlotDij(j, lb2 + 1)  ' время
+                For k = lb1 To ub1
+                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(k, lb2)      ' dij
+                    wsData.Cells(rowIdx, timeCol).Value = PlotDij(k, lb2 + 1)  ' время
                     rowIdx = rowIdx + 1
                 Next
                 npoints = ub1 - lb1 + 1
             ElseIf (ub1 - lb1 + 1) = 2 Then
                 ' Массив вида (2, n) - транспонированный
-                For j = lb2 To ub2
-                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(lb1, j)      ' dij
-                    wsData.Cells(rowIdx, timeCol).Value = PlotDij(lb1 + 1, j)  ' время
+                For k = lb2 To ub2
+                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(lb1, k)      ' dij
+                    wsData.Cells(rowIdx, timeCol).Value = PlotDij(lb1 + 1, k)  ' время
                     rowIdx = rowIdx + 1
                 Next
                 npoints = ub2 - lb2 + 1
@@ -201,10 +202,10 @@ For i = 0 To tbl.Size - 1
             ' Одномерный массив - пытаемся интерпретировать как чередующиеся dij/время
             Dim arrSize: arrSize = ub1 - lb1 + 1
             If arrSize Mod 2 = 0 Then
-                For j = lb1 To ub1 Step 2
-                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(j)      ' dij
-                    If j + 1 <= ub1 Then
-                        wsData.Cells(rowIdx, timeCol).Value = PlotDij(j + 1)  ' время
+                For k = lb1 To ub1 Step 2
+                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(k)      ' dij
+                    If k + 1 <= ub1 Then
+                        wsData.Cells(rowIdx, timeCol).Value = PlotDij(k + 1)  ' время
                     End If
                     rowIdx = rowIdx + 1
                 Next
