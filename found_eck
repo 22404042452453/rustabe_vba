@@ -165,12 +165,31 @@ For i = 0 To tbl.Size - 1
     Dim maxAbsAngle: maxAbsAngle = 0
     
     If IsArray(PlotDij) Then
+        On Error Resume Next
+        Dim arrDims, arrUB
+        arrDims = 0
+        arrUB = UBound(PlotDij, 2)
+        If Err.Number = 0 Then arrDims = 2 Else arrDims = 1
+        Err.Clear
+        On Error GoTo 0
+        
         Dim j
-        For j = 0 To UBound(PlotDij, 1)
-            If Abs(PlotDij(j, 0)) > maxAbsAngle Then
-                maxAbsAngle = Abs(PlotDij(j, 0))
-            End If
-        Next
+        If arrDims = 2 Then
+            ' Двумерный массив (строки, столбцы)
+            For j = 0 To UBound(PlotDij, 1)
+                If Abs(PlotDij(j, 0)) > maxAbsAngle Then
+                    maxAbsAngle = Abs(PlotDij(j, 0))
+                End If
+            Next
+        Else
+            ' Одномерный массив
+            For j = 0 To UBound(PlotDij)
+                If Abs(PlotDij(j)) > maxAbsAngle Then
+                    maxAbsAngle = Abs(PlotDij(j))
+                End If
+            Next
+        End If
+        
         If maxAbsAngle > CriticalAngle Then
             isCritical = True
         End If
@@ -185,6 +204,7 @@ For i = 0 To tbl.Size - 1
         branchData.Add "nKON", nKON
         branchData.Add "PlotDij", PlotDij
         branchData.Add "maxAngle", maxAbsAngle
+        branchData.Add "arrDims", arrDims
         Set allBranchData(criticalCount) = branchData
         criticalCount = criticalCount + 1
     End If
@@ -208,9 +228,14 @@ For i = 0 To criticalCount - 1
     nNACH = branchData("nNACH")
     nKON = branchData("nKON")
     PlotDij = branchData("PlotDij")
+    Dim curArrDims: curArrDims = branchData("arrDims")
     
     If IsArray(PlotDij) Then
-        npoints = UBound(PlotDij, 1) + 1
+        If curArrDims = 2 Then
+            npoints = UBound(PlotDij, 1) + 1
+        Else
+            npoints = UBound(PlotDij) + 1
+        End If
         
         If npoints > 0 Then
             dijCol = dataCol
