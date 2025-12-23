@@ -1,35 +1,14 @@
-' ИСПРАВЛЕННАЯ ВЕРСИЯ - анализ критических углов по ветвям
-' Основные исправления:
-' 1. Убран запуск динамики из начала
-' 2. Добавлен расчёт УР перед динамикой  
-' 3. Добавлена информация об узлах (N нач, N кон)
-' 4. Добавлена обработка ошибок
+' ФИНАЛЬНАЯ ВЕРСИЯ - правильная логика
+' 1. Запуск динамики
+' 2. Выгрузка всех данных
+' 3. Анализ данных  
+' 4. Запись результатов
 
 ' Пересчёт режима (устойчивость/расчёт мощности) перед динамикой
 Function SolveUR()
     ' 0 — успех; любые другие коды считаем ошибкой
     SolveUR = Rastr.rgm("p") ' или нужный код расчёта УР
 End Function
-
-' Сохранение топологии
-Sub TopologyStore
-    On Error Resume Next
-    Rastr.Tables("node").Cols.Add "staRes", PR_BOOL
-    Rastr.Tables("vetv").Cols.Add "staRes", PR_BOOL
-    On Error GoTo 0
-    Rastr.Tables("node").SetSel ""
-    Rastr.Tables("node").Cols("staRes").Calc("sta")
-    Rastr.Tables("vetv").SetSel ""
-    Rastr.Tables("vetv").Cols("staRes").Calc("sta")
-End Sub
-
-' Восстановление топологии
-Sub TopologyRestore
-    Rastr.Tables("node").SetSel ""
-    Rastr.Tables("node").Cols("sta").Calc("staRes")
-    Rastr.Tables("vetv").SetSel ""
-    Rastr.Tables("vetv").Cols("sta").Calc("staRes")
-End Sub
 
 ' === ИНИЦИАЛИЗАЦИЯ ===
 Set spFWDynamic = Rastr.FWDynamic
@@ -54,7 +33,7 @@ wsResult.Cells(1, 6).Value = "Статус"
 wsResult.Range(wsResult.Cells(1, 1), wsResult.Cells(1, 6)).Font.Bold = True
 
 Dim resultRow: resultRow = 2
-Const MaxSnapshotIndex = 1005 ' Увеличено для полноты анализа
+Dim dataCol: dataCol = 1
 
 ' === ПОЛУЧЕНИЕ ТАБЛИЦЫ ВЕТВЕЙ ===
 Set tbl = Rastr.Tables("vetv")
@@ -62,12 +41,7 @@ Set colName = tbl.Cols("name")
 Set colIp = tbl.Cols("ip")    ' Номер узла начала
 Set colIq = tbl.Cols("iq")    ' Номер узла конца
 
-Dim dataCol: dataCol = 1
-
-' === СОХРАНЕНИЕ ТОПОЛОГИИ ===
-TopologyStore
-
-' === РАСЧЁТ УСТАНОВИВШЕГОСЯ РЕЖИМА ===
+' === 1. ЗАПУСК ДИНАМИКИ ===
 urRes = SolveUR()
 If urRes <> 0 Then
     wsResult.Cells(resultRow, 1).Value = "ОШИБКА: расчёт УР не выполнен (код " & urRes & ")"
@@ -75,7 +49,6 @@ If urRes <> 0 Then
     WScript.Quit
 End If
 
-' === ЗАПУСК ДИНАМИКИ ===
 dynRes = spFWDynamic.Run()
 If dynRes <> 0 Then
     wsResult.Cells(resultRow, 1).Value = "ОШИБКА: расчёт динамики не выполнен (код " & dynRes & ")"
@@ -83,11 +56,17 @@ If dynRes <> 0 Then
     WScript.Quit
 End If
 
-' === ЦИКЛ ПО ВЕТВЯМ ===
+' === 2. ВЫГРУЗКА ВСЕХ ДАННЫХ ===
+' Сначала собираем ВСЕ данные из динамики в структурированном виде
+Dim allBranchData()
+ReDim allBranchData(tbl.Size - 1)
+
+Const MaxSnapshotIndex = 1005
+
 For i = 0 To tbl.Size - 1
     vetvName = colName.ZS(i)
-    nNACH = colIp.Z(i)         ' Номер узла начала
-    nKON = colIq.Z(i)          ' Номер узла конца
+    nNACH = colIp.Z(i)
+    nKON = colIq.Z(i)
     
     ' Получаем снимки d_ip (угол начала)
     Set PlotDip = Nothing
@@ -116,6 +95,26 @@ For i = 0 To tbl.Size - 1
         End If
     Next
     
+    ' Сохраняем данные ветви
+    Set branchData = CreateObject("Scripting.Dictionary")
+    branchData.Add "name", vetvName
+    branchData.Add "nNACH", nNACH
+    branchData.Add "nKON", nKON
+    branchData.Add "PlotDip", PlotDip
+    branchData.Add "PlotDiq", PlotDiq
+    Set allBranchData(i) = branchData
+Next
+
+' === 3. АНАЛИЗ ВЫГРУЖЕННЫХ ДАННЫХ ===
+' Теперь анализируем собранные данные
+For i = 0 To tbl.Size - 1
+    Set branchData = allBranchData(i)
+    vetvName = branchData("name")
+    nNACH = branchData("nNACH")
+    nKON = branchData("nKON")
+    Set PlotDip = branchData("PlotDip")
+    Set PlotDiq = branchData("PlotDiq")
+    
     ' Если оба массива получены
     If IsArray(PlotDip) And IsArray(PlotDiq) Then
         npoints = UBound(PlotDip, 1) + 1
@@ -124,7 +123,7 @@ For i = 0 To tbl.Size - 1
             dipCol = dataCol
             timeCol = dataCol + 1
             diqCol = dataCol + 2
-           vzaimCol = dataCol + 3
+            vzaimCol = dataCol + 3
             checkCol = dataCol + 4
             
             ' Заголовки на листе данных
@@ -137,7 +136,7 @@ For i = 0 To tbl.Size - 1
             ' Запись массива d_ip (угол, время)
             wsData.Cells(2, dipCol).Resize(npoints, 2).Value = PlotDip
             
-            ' Запись массива d_iq (только угол) - проверка размерности
+            ' Запись массива d_iq (только угол) - с проверкой размерности
             If UBound(PlotDiq, 1) >= npoints - 1 Then
                 For r = 0 To npoints - 1
                     wsData.Cells(r + 2, diqCol).Value = PlotDiq(r, 0)
@@ -155,7 +154,7 @@ For i = 0 To tbl.Size - 1
             ' Вспомогательная колонка: если взаимный угол > 180, то номер строки
             wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & vzaimCol & ">180,ROW(),999999)"
             
-            ' Диапазоны
+            ' Диапазоны для формул
             vzaimStartAddr = wsData.Cells(2, vzaimCol).Address(False, False, 1, True)
             vzaimEndAddr = wsData.Cells(npoints + 1, vzaimCol).Address(False, False, 1, True)
             vzaimRange = vzaimStartAddr & ":" & vzaimEndAddr
@@ -168,7 +167,7 @@ For i = 0 To tbl.Size - 1
             checkEndAddr = wsData.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
             checkRange = checkStartAddr & ":" & checkEndAddr
             
-            ' Запись формул в результирующий лист
+            ' === 4. ЗАПИСЬ РЕЗУЛЬТАТОВ ===
             wsResult.Cells(resultRow, 1).Value = vetvName
             wsResult.Cells(resultRow, 2).Value = nNACH         ' N нач
             wsResult.Cells(resultRow, 3).Value = nKON          ' N кон
@@ -191,9 +190,7 @@ For i = 0 To tbl.Size - 1
     End If
 Next
 
-' === ВОССТАНОВЛЕНИЕ ТОПОЛОГИИ ===
-TopologyRestore
-
+' === ФИНАЛИЗАЦИЯ ===
 ' Пересчет и фиксация результатов
 xl.Calculate
 wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value = _
