@@ -32,61 +32,61 @@ Dim dataCol: dataCol = 1
 For i = 0 To tbl.Size - 1
     vetvName = colName.ZS(i)
     
-    ' Получаем снимки Dнач
-    Set PlotDnach = Nothing
+    ' Получаем снимки d_ip (угол начала)
+    Set PlotDip = Nothing
     Dim snapIdx, tmpPlot
     For snapIdx = MaxSnapshotIndex To 0 Step -1
         On Error Resume Next
-        tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "Dнач", i, snapIdx)
+        tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "d_ip", i, snapIdx)
         errNum = Err.Number
         On Error GoTo 0
         If errNum = 0 And IsArray(tmpPlot) Then
-            PlotDnach = tmpPlot
+            PlotDip = tmpPlot
             Exit For
         End If
     Next
     
-    ' Получаем снимки Dкон
-    Set PlotDkon = Nothing
+    ' Получаем снимки d_iq (угол конца)
+    Set PlotDiq = Nothing
     For snapIdx = MaxSnapshotIndex To 0 Step -1
         On Error Resume Next
-        tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "Dкон", i, snapIdx)
+        tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "d_iq", i, snapIdx)
         errNum = Err.Number
         On Error GoTo 0
         If errNum = 0 And IsArray(tmpPlot) Then
-            PlotDkon = tmpPlot
+            PlotDiq = tmpPlot
             Exit For
         End If
     Next
     
     ' Если оба массива получены
-    If IsArray(PlotDnach) And IsArray(PlotDkon) Then
-        npoints = UBound(PlotDnach, 1) + 1
+    If IsArray(PlotDip) And IsArray(PlotDiq) Then
+        npoints = UBound(PlotDip, 1) + 1
         
         If npoints > 0 Then
-            dnachCol = dataCol
+            dipCol = dataCol
             timeCol = dataCol + 1
-            dkonCol = dataCol + 2
+            diqCol = dataCol + 2
             vzaimCol = dataCol + 3
             checkCol = dataCol + 4
             
             ' Заголовки на листе данных
-            wsData.Cells(1, dnachCol).Value = vetvName & " (Dнач)"
+            wsData.Cells(1, dipCol).Value = vetvName & " (d_ip)"
             wsData.Cells(1, timeCol).Value = vetvName & " (Time)"
-            wsData.Cells(1, dkonCol).Value = vetvName & " (Dкон)"
+            wsData.Cells(1, diqCol).Value = vetvName & " (d_iq)"
             wsData.Cells(1, vzaimCol).Value = vetvName & " (Взаимный)"
             wsData.Cells(1, checkCol).Value = vetvName & " (>180)"
             
-            ' Запись массива Dнач (Delta, Time)
-            wsData.Cells(2, dnachCol).Resize(npoints, 2).Value = PlotDnach
+            ' Запись массива d_ip (угол, время)
+            wsData.Cells(2, dipCol).Resize(npoints, 2).Value = PlotDip
             
-            ' Запись массива Dкон (только Delta)
+            ' Запись массива d_iq (только угол)
             For r = 0 To npoints - 1
-                wsData.Cells(r + 2, dkonCol).Value = PlotDkon(r, 0)
+                wsData.Cells(r + 2, diqCol).Value = PlotDiq(r, 0)
             Next
             
             ' Формула взаимного угла
-            wsData.Cells(2, vzaimCol).Resize(npoints, 1).FormulaR1C1 = "=ABS(RC" & dnachCol & "-RC" & dkonCol & ")"
+            wsData.Cells(2, vzaimCol).Resize(npoints, 1).FormulaR1C1 = "=ABS(RC" & dipCol & "-RC" & diqCol & ")"
             
             ' Вспомогательная колонка: если взаимный угол > 180, то номер строки
             wsData.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & vzaimCol & ">180,ROW(),999999)"
