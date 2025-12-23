@@ -1,24 +1,45 @@
-' Запуск C# программы
-Set shell = CreateObject("WScript.Shell")
-rastrFile = Rastr.Get("Filename")
-shell.Run "C:\Path\To\dot_tst_rastr.exe " & Chr(34) & rastrFile & Chr(34), 1, True
-
-' Чтение логов в Excel
+' Файл для логов
+logPath = "C:\Temp\rastr_log.txt"
 Set fso = CreateObject("Scripting.FileSystemObject")
-Set logFile = fso.OpenTextFile("C:\Temp\rastr_log.txt", 1)
-logs = logFile.ReadAll
+Set logFile = fso.CreateTextFile(logPath, True)
+
+' Функция для записи в лог
+Sub WriteLog(msg)
+    logFile.WriteLine Now & " | " & msg
+End Sub
+
+' Перехват логов Rastr
+Rastr.OnLog = GetRef("RastrLogHandler")
+
+Sub RastrLogHandler(Code, Level, StageId, TableName, TableIndex, Description, FormName)
+    WriteLog "Level " & Level & " | " & Description
+End Sub
+
+' Запуск динамики
+WriteLog "Запуск динамики..."
+On Error Resume Next
+Rastr.rgm("p")
+If Err.Number <> 0 Then
+    WriteLog "ОШИБКА: " & Err.Description
+End If
+On Error GoTo 0
+WriteLog "Динамика завершена"
+
 logFile.Close
 
-' Вывод в Excel
+' Вывод логов в Excel
 Set xl = CreateObject("Excel.Application")
 xl.Visible = True
 Set wb = xl.Workbooks.Add
 Set ws = wb.Worksheets(1)
 
-logLines = Split(logs, vbCrLf)
-For i = 0 To UBound(logLines)
-    ws.Cells(i + 1, 1).Value = logLines(i)
-Next
+Set logFileRead = fso.OpenTextFile(logPath, 1)
+i = 1
+Do Until logFileRead.AtEndOfStream
+    ws.Cells(i, 1).Value = logFileRead.ReadLine
+    i = i + 1
+Loop
+logFileRead.Close
 
 ws.Columns(1).AutoFit
-MsgBox "Готово! Логов: " & UBound(logLines) + 1
+MsgBox "Готово! Логов: " & (i-1)
