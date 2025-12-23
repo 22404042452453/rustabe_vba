@@ -164,13 +164,13 @@ For i = 0 To tbl.Size - 1
         wsData.Cells(1, timeCol).Value = vetvName & " (Time)"
         wsData.Cells(1, checkCol).Value = vetvName & " (>180)"
         
-        ' Запись массива dij как есть - Excel сам разберётся
+        ' Запись массива dij (угол, время) - 2 колонки
         On Error Resume Next
-        wsData.Cells(2, dijCol).Value = PlotDij
+        wsData.Range(wsData.Cells(2, dijCol), wsData.Cells(10000, timeCol)).Value = PlotDij
         If Err.Number <> 0 Then
-            ' Если не получилось напрямую - попробуем через Transpose
             Err.Clear
-            wsData.Cells(2, dijCol).Value = xl.WorksheetFunction.Transpose(PlotDij)
+            ' Если не получилось - пробуем транспонировать
+            wsData.Range(wsData.Cells(2, dijCol), wsData.Cells(10000, timeCol)).Value = xl.WorksheetFunction.Transpose(PlotDij)
         End If
         On Error GoTo 0
         
