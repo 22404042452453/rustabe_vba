@@ -4,16 +4,16 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 Set logFile = fso.CreateTextFile(logPath, True)
 
 ' Функция для записи в лог
-Sub WriteLog(msg)
+Function WriteLog(msg)
     logFile.WriteLine Now & " | " & msg
-End Sub
+End Function
 
-' Перехват логов Rastr
-Rastr.OnLog = GetRef("RastrLogHandler")
-
-Sub RastrLogHandler(Code, Level, StageId, TableName, TableIndex, Description, FormName)
+' Перехват логов Rastr (правильный синтаксис)
+Function RastrLogHandler(Code, Level, StageId, TableName, TableIndex, Description, FormName)
     WriteLog "Level " & Level & " | " & Description
-End Sub
+End Function
+
+Rastr.OnLog = GetRef("RastrLogHandler")
 
 ' Запуск динамики
 WriteLog "Запуск динамики..."
