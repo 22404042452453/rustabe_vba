@@ -1,6 +1,38 @@
-' Запуск динамики
+' ИСПРАВЛЕННАЯ ВЕРСИЯ - анализ критических углов по ветвям
+' Основные исправления:
+' 1. Убран запуск динамики из начала
+' 2. Добавлен расчёт УР перед динамикой  
+' 3. Добавлена информация об узлах (N нач, N кон)
+' 4. Добавлена обработка ошибок
+
+' Пересчёт режима (устойчивость/расчёт мощности) перед динамикой
+Function SolveUR()
+    ' 0 — успех; любые другие коды считаем ошибкой
+    SolveUR = Rastr.rgm("p") ' или нужный код расчёта УР
+End Function
+
+' Сохранение топологии
+Sub TopologyStore
+    On Error Resume Next
+    Rastr.Tables("node").Cols.Add "staRes", PR_BOOL
+    Rastr.Tables("vetv").Cols.Add "staRes", PR_BOOL
+    On Error GoTo 0
+    Rastr.Tables("node").SetSel ""
+    Rastr.Tables("node").Cols("staRes").Calc("sta")
+    Rastr.Tables("vetv").SetSel ""
+    Rastr.Tables("vetv").Cols("staRes").Calc("sta")
+End Sub
+
+' Восстановление топологии
+Sub TopologyRestore
+    Rastr.Tables("node").SetSel ""
+    Rastr.Tables("node").Cols("sta").Calc("staRes")
+    Rastr.Tables("vetv").SetSel ""
+    Rastr.Tables("vetv").Cols("sta").Calc("staRes")
+End Sub
+
+' === ИНИЦИАЛИЗАЦИЯ ===
 Set spFWDynamic = Rastr.FWDynamic
-spFWDynamic.Run()
 
 ' Инициализация Excel
 Set xl = CreateObject("Excel.Application")
@@ -12,25 +44,50 @@ wsData.Name = "Данные"
 Set wsResult = wb.Worksheets.Add
 wsResult.Name = "Критические углы"
 
-' Заголовки результирующего листа
+' === ЗАГОЛОВКИ РЕЗУЛЬТИРУЮЩЕГО ЛИСТА ===
 wsResult.Cells(1, 1).Value = "Ветвь"
-wsResult.Cells(1, 2).Value = "Max взаимный угол"
-wsResult.Cells(1, 3).Value = "Время критического угла"
-wsResult.Cells(1, 4).Value = "Статус"
-wsResult.Range(wsResult.Cells(1, 1), wsResult.Cells(1, 4)).Font.Bold = True
+wsResult.Cells(1, 2).Value = "N нач"
+wsResult.Cells(1, 3).Value = "N кон"
+wsResult.Cells(1, 4).Value = "Max взаимный угол"
+wsResult.Cells(1, 5).Value = "Время критического угла"
+wsResult.Cells(1, 6).Value = "Статус"
+wsResult.Range(wsResult.Cells(1, 1), wsResult.Cells(1, 6)).Font.Bold = True
 
 Dim resultRow: resultRow = 2
-Const MaxSnapshotIndex = 500
+Const MaxSnapshotIndex = 1005 ' Увеличено для полноты анализа
 
-' Получаем таблицу ветвей
+' === ПОЛУЧЕНИЕ ТАБЛИЦЫ ВЕТВЕЙ ===
 Set tbl = Rastr.Tables("vetv")
 Set colName = tbl.Cols("name")
+Set colIp = tbl.Cols("ip")    ' Номер узла начала
+Set colIq = tbl.Cols("iq")    ' Номер узла конца
 
 Dim dataCol: dataCol = 1
 
-' Проходим по всем ветвям
+' === СОХРАНЕНИЕ ТОПОЛОГИИ ===
+TopologyStore
+
+' === РАСЧЁТ УСТАНОВИВШЕГОСЯ РЕЖИМА ===
+urRes = SolveUR()
+If urRes <> 0 Then
+    wsResult.Cells(resultRow, 1).Value = "ОШИБКА: расчёт УР не выполнен (код " & urRes & ")"
+    MsgBox "Ошибка расчёта УР: " & urRes, vbCritical
+    WScript.Quit
+End If
+
+' === ЗАПУСК ДИНАМИКИ ===
+dynRes = spFWDynamic.Run()
+If dynRes <> 0 Then
+    wsResult.Cells(resultRow, 1).Value = "ОШИБКА: расчёт динамики не выполнен (код " & dynRes & ")"
+    MsgBox "Ошибка расчёта динамики: " & dynRes, vbCritical
+    WScript.Quit
+End If
+
+' === ЦИКЛ ПО ВЕТВЯМ ===
 For i = 0 To tbl.Size - 1
     vetvName = colName.ZS(i)
+    nNACH = colIp.Z(i)         ' Номер узла начала
+    nKON = colIq.Z(i)          ' Номер узла конца
     
     ' Получаем снимки d_ip (угол начала)
     Set PlotDip = Nothing
@@ -67,7 +124,7 @@ For i = 0 To tbl.Size - 1
             dipCol = dataCol
             timeCol = dataCol + 1
             diqCol = dataCol + 2
-            vzaimCol = dataCol + 3
+           vzaimCol = dataCol + 3
             checkCol = dataCol + 4
             
             ' Заголовки на листе данных
@@ -80,10 +137,17 @@ For i = 0 To tbl.Size - 1
             ' Запись массива d_ip (угол, время)
             wsData.Cells(2, dipCol).Resize(npoints, 2).Value = PlotDip
             
-            ' Запись массива d_iq (только угол)
-            For r = 0 To npoints - 1
-                wsData.Cells(r + 2, diqCol).Value = PlotDiq(r, 0)
-            Next
+            ' Запись массива d_iq (только угол) - проверка размерности
+            If UBound(PlotDiq, 1) >= npoints - 1 Then
+                For r = 0 To npoints - 1
+                    wsData.Cells(r + 2, diqCol).Value = PlotDiq(r, 0)
+                Next
+            Else
+                ' Если размерности не совпадают, заполняем чем есть
+                For r = 0 To UBound(PlotDiq, 1)
+                    wsData.Cells(r + 2, diqCol).Value = PlotDiq(r, 0)
+                Next
+            End If
             
             ' Формула взаимного угла
             wsData.Cells(2, vzaimCol).Resize(npoints, 1).FormulaR1C1 = "=ABS(RC" & dipCol & "-RC" & diqCol & ")"
@@ -106,20 +170,34 @@ For i = 0 To tbl.Size - 1
             
             ' Запись формул в результирующий лист
             wsResult.Cells(resultRow, 1).Value = vetvName
-            wsResult.Cells(resultRow, 2).Formula = "=MAX(" & vzaimRange & ")"
-            wsResult.Cells(resultRow, 3).Formula = "=IF(AND(MAX(" & vzaimRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
-            wsResult.Cells(resultRow, 4).Formula = "=IF(MAX(" & vzaimRange & ")>180,""КРИТИЧЕСКИЙ УГОЛ (ЭЦК)"",""Норма"")"
+            wsResult.Cells(resultRow, 2).Value = nNACH         ' N нач
+            wsResult.Cells(resultRow, 3).Value = nKON          ' N кон
+            wsResult.Cells(resultRow, 4).Formula = "=MAX(" & vzaimRange & ")"
+            wsResult.Cells(resultRow, 5).Formula = "=IF(AND(MAX(" & vzaimRange & ")>180,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+            wsResult.Cells(resultRow, 6).Formula = "=IF(MAX(" & vzaimRange & ")>180,""КРИТИЧЕСКИЙ УГОЛ (ЭЦК)"",""Норма"")"
             
             resultRow = resultRow + 1
             dataCol = dataCol + 5
         End If
+    Else
+        ' Если не удалось получить данные для ветви
+        wsResult.Cells(resultRow, 1).Value = vetvName
+        wsResult.Cells(resultRow, 2).Value = nNACH
+        wsResult.Cells(resultRow, 3).Value = nKON
+        wsResult.Cells(resultRow, 4).Value = "Нет данных"
+        wsResult.Cells(resultRow, 5).Value = ""
+        wsResult.Cells(resultRow, 6).Value = "ОШИБКА: нет данных динамики"
+        resultRow = resultRow + 1
     End If
 Next
 
+' === ВОССТАНОВЛЕНИЕ ТОПОЛОГИИ ===
+TopologyRestore
+
 ' Пересчет и фиксация результатов
 xl.Calculate
-wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 4)).Value = _
-    wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 4)).Value
+wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value = _
+    wsResult.Range(wsResult.Cells(2, 1), wsResult.Cells(resultRow - 1, 6)).Value
 
 ' Форматирование
 wsData.Columns.AutoFit
@@ -127,10 +205,14 @@ wsResult.Columns.AutoFit
 
 ' Подсветка критических углов
 For r = 2 To resultRow - 1
-    If wsResult.Cells(r, 4).Value = "КРИТИЧЕСКИЙ УГОЛ (ЭЦК)" Then
-        wsResult.Range(wsResult.Cells(r, 1), wsResult.Cells(r, 4)).Interior.Color = RGB(255, 200, 200)
-        wsResult.Cells(r, 4).Font.Bold = True
+    If wsResult.Cells(r, 6).Value = "КРИТИЧЕСКИЙ УГОЛ (ЭЦК)" Then
+        wsResult.Range(wsResult.Cells(r, 1), wsResult.Cells(r, 6)).Interior.Color = RGB(255, 200, 200)
+        wsResult.Cells(r, 6).Font.Bold = True
     End If
 Next
 
-MsgBox "Анализ завершен!", vbInformation, "Готово"
+MsgBox "Анализ завершен! Проанализировано ветвей: " & (resultRow - 2), vbInformation, "Готово"
+
+On Error Resume Next
+xl.DisplayAlerts = True
+On Error GoTo 0
