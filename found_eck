@@ -133,44 +133,59 @@ For i = 0 To tbl.Size - 1
         wsData.Cells(1, timeCol).Value = vetvName & " (Time)"
         wsData.Cells(1, checkCol).Value = vetvName & " (>180)"
         
-        Dim npoints: npoints = 0
+        ' Определяем размер массива ДО записи
+        Dim lb1, ub1, lb2, ub2, is2D
+        Dim arrRows: arrRows = 0
+        Dim arrCols: arrCols = 0
         
-        ' СПОСОБ 1: Прямая запись массива в Excel
         On Error Resume Next
-        wsData.Range(wsData.Cells(2, dijCol), wsData.Cells(10000, timeCol)).Value = PlotDij
-        If Err.Number <> 0 Then
-            Err.Clear
-            ' Пробуем транспонировать
-            wsData.Range(wsData.Cells(2, dijCol), wsData.Cells(10000, timeCol)).Value = _
-                xl.WorksheetFunction.Transpose(PlotDij)
-        End If
+        lb1 = LBound(PlotDij, 1)
+        ub1 = UBound(PlotDij, 1)
+        lb2 = LBound(PlotDij, 2)
+        ub2 = UBound(PlotDij, 2)
+        is2D = (Err.Number = 0)
         Err.Clear
         On Error GoTo 0
         
-        ' Проверяем сколько данных записалось в колонку dij
-        npoints = wsData.Cells(wsData.Rows.Count, dijCol).End(-4162).Row - 1  ' xlUp = -4162
-        
-        ' Если прямая запись не сработала, пробуем поэлементно
-        If npoints <= 0 Then
-            Dim lb1, ub1, lb2, ub2, is2D
-            Dim rowIdx: rowIdx = 2
-            
+        If is2D Then
+            arrRows = ub1 - lb1 + 1
+            arrCols = ub2 - lb2 + 1
+        Else
+            ' 1D массив
             On Error Resume Next
-            lb1 = LBound(PlotDij, 1)
-            ub1 = UBound(PlotDij, 1)
-            lb2 = LBound(PlotDij, 2)
-            ub2 = UBound(PlotDij, 2)
-            is2D = (Err.Number = 0)
+            lb1 = LBound(PlotDij)
+            ub1 = UBound(PlotDij)
             Err.Clear
             On Error GoTo 0
-            
-            If Not is2D Then
-                On Error Resume Next
-                lb1 = LBound(PlotDij)
-                ub1 = UBound(PlotDij)
-                Err.Clear
-                On Error GoTo 0
+            arrRows = ub1 - lb1 + 1
+            arrCols = 1
+        End If
+        
+        Dim npoints: npoints = 0
+        
+        ' Записываем в ТОЧНЫЙ диапазон (без лишних #Н/Д)
+        If arrRows > 0 Then
+            On Error Resume Next
+            If is2D And arrCols >= 2 Then
+                ' 2D массив с 2+ колонками - записываем как есть
+                wsData.Range(wsData.Cells(2, dijCol), wsData.Cells(arrRows + 1, timeCol)).Value = PlotDij
+            Else
+                ' Пробуем транспонировать или записать как есть
+                wsData.Range(wsData.Cells(2, dijCol), wsData.Cells(arrRows + 1, timeCol)).Value = PlotDij
+                If Err.Number <> 0 Then
+                    Err.Clear
+                    wsData.Range(wsData.Cells(2, dijCol), wsData.Cells(arrRows + 1, timeCol)).Value = _
+                        xl.WorksheetFunction.Transpose(PlotDij)
+                End If
             End If
+            Err.Clear
+            On Error GoTo 0
+            npoints = arrRows
+        End If
+        
+        ' Если прямая запись не сработала (npoints=0), пробуем поэлементно
+        If npoints <= 0 Then
+            Dim rowIdx: rowIdx = 2
             
             If is2D Then
                 Dim dim1Size, dim2Size
