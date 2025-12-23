@@ -133,103 +133,95 @@ For i = 0 To tbl.Size - 1
         wsData.Cells(1, timeCol).Value = vetvName & " (Time)"
         wsData.Cells(1, checkCol).Value = vetvName & " (>180)"
         
-        ' Определяем структуру массива
-        Dim lb1, ub1, lb2, ub2, is2D
         Dim npoints: npoints = 0
-        Dim rowIdx: rowIdx = 2
         
+        ' СПОСОБ 1: Прямая запись массива в Excel
         On Error Resume Next
-        lb1 = LBound(PlotDij, 1)
-        ub1 = UBound(PlotDij, 1)
-        lb2 = LBound(PlotDij, 2)
-        ub2 = UBound(PlotDij, 2)
-        is2D = (Err.Number = 0)
+        wsData.Range(wsData.Cells(2, dijCol), wsData.Cells(10000, timeCol)).Value = PlotDij
+        If Err.Number <> 0 Then
+            Err.Clear
+            ' Пробуем транспонировать
+            wsData.Range(wsData.Cells(2, dijCol), wsData.Cells(10000, timeCol)).Value = _
+                xl.WorksheetFunction.Transpose(PlotDij)
+        End If
         Err.Clear
         On Error GoTo 0
         
-        ' Если не удалось получить bounds для 1D массива, попробуем ещё раз
-        If Not is2D Then
+        ' Проверяем сколько данных записалось в колонку dij
+        npoints = wsData.Cells(wsData.Rows.Count, dijCol).End(-4162).Row - 1  ' xlUp = -4162
+        
+        ' Если прямая запись не сработала, пробуем поэлементно
+        If npoints <= 0 Then
+            Dim lb1, ub1, lb2, ub2, is2D
+            Dim rowIdx: rowIdx = 2
+            
             On Error Resume Next
-            lb1 = LBound(PlotDij)
-            ub1 = UBound(PlotDij)
+            lb1 = LBound(PlotDij, 1)
+            ub1 = UBound(PlotDij, 1)
+            lb2 = LBound(PlotDij, 2)
+            ub2 = UBound(PlotDij, 2)
+            is2D = (Err.Number = 0)
             Err.Clear
             On Error GoTo 0
-        End If
-        
-        ' Обработка массива
-        If is2D Then
-            ' Двумерный массив
-            Dim dim1Size, dim2Size
-            dim1Size = ub1 - lb1 + 1
-            dim2Size = ub2 - lb2 + 1
             
-            If dim2Size = 2 Then
-                ' Массив (n, 2): каждая строка = [угол, время]
-                Dim m
-                For m = lb1 To ub1
-                    On Error Resume Next
-                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(m, lb2)
-                    wsData.Cells(rowIdx, timeCol).Value = PlotDij(m, lb2 + 1)
-                    If Err.Number = 0 Then rowIdx = rowIdx + 1
-                    Err.Clear
-                    On Error GoTo 0
-                Next
-                npoints = rowIdx - 2
-            ElseIf dim1Size = 2 Then
-                ' Массив (2, n): транспонированный
-                Dim n
-                For n = lb2 To ub2
-                    On Error Resume Next
-                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(lb1, n)
-                    wsData.Cells(rowIdx, timeCol).Value = PlotDij(lb1 + 1, n)
-                    If Err.Number = 0 Then rowIdx = rowIdx + 1
-                    Err.Clear
-                    On Error GoTo 0
-                Next
-                npoints = rowIdx - 2
-            Else
-                ' Другой 2D формат - пробуем первую строку как данные
-                Dim k
-                For k = lb2 To ub2
-                    On Error Resume Next
-                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(lb1, k)
-                    If Err.Number = 0 Then rowIdx = rowIdx + 1
-                    Err.Clear
-                    On Error GoTo 0
-                Next
-                npoints = rowIdx - 2
+            If Not is2D Then
+                On Error Resume Next
+                lb1 = LBound(PlotDij)
+                ub1 = UBound(PlotDij)
+                Err.Clear
+                On Error GoTo 0
             End If
-        Else
-            ' Одномерный массив
-            Dim arrSize: arrSize = ub1 - lb1 + 1
-            If arrSize > 0 Then
-                If arrSize Mod 2 = 0 Then
-                    ' Чередующиеся значения [dij1, time1, dij2, time2, ...]
-                    Dim p
-                    For p = lb1 To ub1 Step 2
+            
+            If is2D Then
+                Dim dim1Size, dim2Size
+                dim1Size = ub1 - lb1 + 1
+                dim2Size = ub2 - lb2 + 1
+                
+                If dim2Size = 2 Then
+                    Dim m
+                    For m = lb1 To ub1
                         On Error Resume Next
-                        wsData.Cells(rowIdx, dijCol).Value = PlotDij(p)
-                        If p + 1 <= ub1 Then
-                            wsData.Cells(rowIdx, timeCol).Value = PlotDij(p + 1)
-                        End If
+                        wsData.Cells(rowIdx, dijCol).Value = PlotDij(m, lb2)
+                        wsData.Cells(rowIdx, timeCol).Value = PlotDij(m, lb2 + 1)
                         If Err.Number = 0 Then rowIdx = rowIdx + 1
                         Err.Clear
                         On Error GoTo 0
                     Next
-                    npoints = rowIdx - 2
+                ElseIf dim1Size = 2 Then
+                    Dim n
+                    For n = lb2 To ub2
+                        On Error Resume Next
+                        wsData.Cells(rowIdx, dijCol).Value = PlotDij(lb1, n)
+                        wsData.Cells(rowIdx, timeCol).Value = PlotDij(lb1 + 1, n)
+                        If Err.Number = 0 Then rowIdx = rowIdx + 1
+                        Err.Clear
+                        On Error GoTo 0
+                    Next
                 Else
-                    ' Нечётное количество - только углы
-                    Dim q
-                    For q = lb1 To ub1
+                    Dim k
+                    For k = lb1 To ub1
                         On Error Resume Next
-                        wsData.Cells(rowIdx, dijCol).Value = PlotDij(q)
+                        wsData.Cells(rowIdx, dijCol).Value = PlotDij(k, lb2)
+                        wsData.Cells(rowIdx, timeCol).Value = PlotDij(k, lb2 + 1)
                         If Err.Number = 0 Then rowIdx = rowIdx + 1
                         Err.Clear
                         On Error GoTo 0
                     Next
-                    npoints = rowIdx - 2
                 End If
+            Else
+                Dim p
+                For p = lb1 To ub1 Step 2
+                    On Error Resume Next
+                    wsData.Cells(rowIdx, dijCol).Value = PlotDij(p)
+                    If p + 1 <= ub1 Then
+                        wsData.Cells(rowIdx, timeCol).Value = PlotDij(p + 1)
+                    End If
+                    If Err.Number = 0 Then rowIdx = rowIdx + 1
+                    Err.Clear
+                    On Error GoTo 0
+                Next
             End If
+            npoints = rowIdx - 2
         End If
         
         ' Создаём формулы если есть данные
