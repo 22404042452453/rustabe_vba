@@ -74,7 +74,7 @@ For i = 0 To tbl.Size - 1
         errNum = Err.Number
         On Error GoTo 0
         If errNum = 0 And IsArray(tmpPlot) Then
-            PlotDij = tmpPlot
+            Set PlotDij = tmpPlot
             Exit For
         End If
     Next
@@ -87,11 +87,11 @@ For i = 0 To tbl.Size - 1
             tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "Delta", i, snapIdx)
             errNum = Err.Number
             On Error GoTo 0
-            If errNum = 0 And IsArray(tmpPlot) Then
-                PlotDij = tmpPlot
-                Exit For
-            End If
-        Next
+        If errNum = 0 And IsArray(tmpPlot) Then
+            Set PlotDij = tmpPlot
+            Exit For
+        End If
+    Next
     End If
     
     ' Если всё ещё нет данных, попробуем d_angle
@@ -101,11 +101,11 @@ For i = 0 To tbl.Size - 1
             tmpPlot = Rastr.GetChainedGraphSnapshot("vetv", "d_angle", i, snapIdx)
             errNum = Err.Number
             On Error GoTo 0
-            If errNum = 0 And IsArray(tmpPlot) Then
-                PlotDij = tmpPlot
-                Exit For
-            End If
-        Next
+        If errNum = 0 And IsArray(tmpPlot) Then
+            Set PlotDij = tmpPlot
+            Exit For
+        End If
+    Next
     End If
     
     ' Сохраняем данные ветви
