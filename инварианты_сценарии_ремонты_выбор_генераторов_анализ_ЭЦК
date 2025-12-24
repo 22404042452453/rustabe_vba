@@ -19,7 +19,7 @@ Set spNode   = Rastr.Tables("node")
 Set xl = CreateObject("Excel.Application")
 xl.Visible = True
 xl.DisplayAlerts = False
-xl.ScreenUpdating = False
+xl.ScreenUpdating = True
 Set wb = xl.Workbooks.Add
 
 ' Лист 1: Данные генераторов
