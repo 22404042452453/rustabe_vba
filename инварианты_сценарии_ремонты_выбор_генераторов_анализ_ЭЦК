@@ -1,230 +1,621 @@
+' ====================================================================
+' ОБЪЕДИНЁННЫЙ АНАЛИЗ: ГЕНЕРАТОРЫ + ЭЦК (КРИТИЧЕСКИЕ УГЛЫ dij)
+' Для сценариев с перебором комбинаций ремонтов
+' ====================================================================
 
-' ==============================================================================
-' ПОЛНЫЙ КОМПЛЕКСНЫЙ СКРИПТ: СЦЕНАРИИ + РЕМОНТЫ + ГЕНЕРАТОРЫ + ЭЦК (DIJ)
-' Включает все формулы, 4 листа Excel, обработку массивов и подсветку.
-' ==============================================================================
-Option Explicit
-
-' --- 1. ПАРАМЕТРЫ И ПУТИ [cite: 1] ---
-Dim ScenarioTemplatePath, ScenarioFolderPath, MaxRepair, MaxRepair_count
+' --- ПАРАМЕТРЫ СЦЕНАРИЕВ И ВАРИАНТОВ ---
 ScenarioTemplatePath = "C:\Users\k.marchuk\Desktop\сценарии\1.scn"
 ScenarioFolderPath   = "C:\Users\k.marchuk\Desktop\сценарии"
+
+' Максимальные числа для Repair
 MaxRepair = 2
 MaxRepair_count = 1
 
-' --- 2. ИНИЦИАЛИЗАЦИЯ EXCEL (4 ЛИСТА) [cite: 50] ---
-Dim xl, wb, wsGenRes, wsDijRes, wsData1, wsData2
-Set xl = CreateObject("Excel.Application")
-xl.Visible = True: xl.DisplayAlerts = False
-Set wb = xl.Workbooks.Add
-
-' Создаем структуру согласно вашим требованиям
-Set wsData1  = wb.Worksheets(1): wsData1.Name  = "Данные_1"      ' Для генераторов [cite: 1]
-Set wsData2  = wb.Worksheets.Add: wsData2.Name = "Данные_2"      ' Для ветвей (ЭЦК) [cite: 50]
-Set wsGenRes = wb.Worksheets.Add: wsGenRes.Name = "Генераторы"    ' Результаты Delta
-Set wsDijRes = wb.Worksheets.Add: wsDijRes.Name = "ЭЦК анализ"   ' Результаты dij
-
-Dim rG, rD, cG, cD
-rG = 1: rD = 1: cG = 1: cD = 1
-
-' --- 3. ПОДГОТОВКА RASTR ---
-Dim spBranch, spNode, tblGen, spFWDynamic, fso, colName, colGenSel
+' --- ИНИЦИАЛИЗАЦИЯ RASTR ТАБЛИЦ ---
 Set spBranch = Rastr.Tables("vetv")
 Set spNode   = Rastr.Tables("node")
-Set tblGen   = Rastr.Tables("Generator")
-Set fso      = CreateObject("Scripting.FileSystemObject")
 
-' Проверка и добавление полей [cite: 12, 34]
-PrepareFields
+' --- ИНИЦИАЛИЗАЦИЯ EXCEL (4 ЛИСТА) ---
+Set xl = CreateObject("Excel.Application")
+xl.Visible = True
+xl.DisplayAlerts = False
+xl.ScreenUpdating = False
+Set wb = xl.Workbooks.Add
 
-' Сбор выбранных объектов (sel) [cite: 37, 51]
-Dim selGen, selBr
-selGen = GetSelectedIndices(tblGen)
-selBr  = GetSelectedIndices(spBranch)
+' Лист 1: Данные генераторов
+Set wsDataGen = wb.Worksheets(1)
+wsDataGen.Name = "Данные_Генераторы"
 
-If UBound(selGen) < 0 And UBound(selBr) < 0 Then
-    MsgBox "Не выбраны объекты (sel) для анализа!", vbExclamation
+' Лист 2: Данные ветвей ЭЦК
+Set wsDataECK = wb.Worksheets.Add
+wsDataECK.Name = "Данные_ЭЦК"
+
+' Лист 3: Результаты генераторов
+Set wsResultGen = wb.Worksheets.Add
+wsResultGen.Name = "Генераторы"
+
+' Лист 4: Результаты ЭЦК
+Set wsResultECK = wb.Worksheets.Add
+wsResultECK.Name = "ЭЦК_Анализ"
+
+' --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СТРОК ---
+Dim resultRowGen: resultRowGen = 1
+Dim resultRowECK: resultRowECK = 1
+Dim TemplateFieldsAdded: TemplateFieldsAdded = 0
+
+' --- ПОДГОТОВКА ШАБЛОНА ---
+PrepareTemplate
+
+' --- ВСПОМОГАТЕЛЬНЫЕ КОЛОНКИ ВЕТВЕЙ ---
+Set spBranchIp  = spBranch.Cols("ip")
+Set spBranchIq  = spBranch.Cols("iq")
+Set spBranchNm  = spBranch.Cols("name")
+Set spBranchSta = spBranch.Cols("sta")
+Set spBranchGrp = spBranch.Cols("groupid")
+Set spBranchSrt = spBranch.Cols("_SortKey")
+Set spBranchSel = spBranch.Cols("sel")
+
+' --- ВСПОМОГАТЕЛЬНЫЕ КОЛОНКИ УЗЛОВ ---
+Set spNodeSta   = spNode.Cols("sta")
+Set spNodeNy    = spNode.Cols("ny")
+Set spNodeName  = spNode.Cols("name")
+Set spNodeV     = spNode.Cols("vras")
+
+' ====================================================================
+' КЛАСС КОМБИНАТОРА
+' ====================================================================
+Class Combinator
+    Dim Counter()
+    Dim V()
+    Private m
+    Private n
+    Private Sub Swap(byref V,i1,i2)
+        temp  = V(i1)
+        V(i1) = V(i2)
+        V(i2) = temp
+    End Sub
+    public function Init(Vsource,Em,En)
+        Init = True
+        m = Em
+        n = En
+        Redim V(UBound(Vsource))
+        for i = 0 to UBound(Vsource)
+            V(i) = Vsource(i)
+        next
+        if m > n Then MsgBox "M>N !" : Init = False
+        If Init Then
+            Redim Counter(n-1)
+            for i = 0 to Ubound(Counter)
+                Counter(i) = i
+            next
+        End If
+    end function
+    public function FirstCombination(byref Vout)
+        ReDim Vout(m-1)
+        for i = 0 to m-1
+            Vout(i) = V(Counter(i))
+        next
+        FirstCombination = not ((m > n) or (m = 0))
+    end function
+    public function NextCombination(byref Vout)
+        dim incremented
+        incremented = false
+        if Counter(m-1) < n - 1 Then
+            Counter(m-1) = Counter(m-1) + 1
+            incremented = true
+        Else
+            for i = m-2 to 0 step -1
+                if Counter(i) < n - m + i Then
+                    Counter(i) = Counter(i) + 1
+                    incremented = true
+                    for j = i + 1 to m - 1
+                        Counter(j) = Counter(j-1) + 1
+                    next
+                End If
+            next
+        End if
+        if incremented then
+            Redim Vout(m-1)
+            for i = 0 to m-1
+                Vout(i) = V(Counter(i))
+            next
+            NextCombination = 1
+        else
+            NextCombination = 0
+        end if
+    end function
+End Class
+
+' ====================================================================
+' ВСПОМОГАТЕЛЬНЫЕ ПРОЦЕДУРЫ
+' ====================================================================
+Sub TopologyStore
+    On Error Resume Next
+    spNode.Cols.Add "staRes",PR_BOOL
+    spBranch.Cols.Add "staRes",PR_BOOL
+    On Error GoTo 0
+    spNode.SetSel ""
+    spNode.Cols("staRes").Calc("sta")
+    spBranch.SetSel ""
+    spBranch.Cols("staRes").Calc("sta")
+End Sub
+
+Sub TopologyRestore
+    spNode.SetSel ""
+    spNodeSta.Calc("staRes")
+    spBranch.SetSel ""
+    spBranchSta.Calc("staRes")
+End Sub
+
+Function SolveUR()
+    SolveUR = Rastr.rgm("p")
+End Function
+
+Sub PrepareTemplate
+    TemplateFieldsAdded = 0
+    if spBranch.Cols.Find("Repair") < 0 Then
+        spBranch.Cols.Add "Repair", PR_BOOL
+        spBranch.Cols("Repair").Prop(FL_ZAG) = "Ремонт"
+        TemplateFieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("Report") < 0 Then
+        spBranch.Cols.Add "Report", PR_BOOL
+        spBranch.Cols("Report").Prop(FL_ZAG) = "Отчет"
+        TemplateFieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("_SortKey") < 0 Then
+        spBranch.Cols.Add "_SortKey", PR_INT
+    End if
+    if TemplateFieldsAdded = 1 Then 
+        MsgBox "Добавлены поля Repair/Report. Сохраните модель, если нужно.",1,"Подготовка шаблона"
+    End If
+End Sub
+
+Function PlaceOffs(byref V, OffCounter)
+    OffList = ""
+    for offc = 0 to OffCounter-1
+        if offc Then OffList = OffList + ","
+        spBranchSta.Z(V(offc)) = 1
+        GroupId = spBranchGrp.Z(V(offc))
+        if GroupId > 0 Then
+            spBranch.SetSel "groupid=" & CStr(GroupId)
+            spBranchSta.Calc 1
+            spBranch.SetSel ""
+        End If
+        if(OffList <> "") Then OffList = OffList +  "|" 
+        OffList = OffList + Cstr(spBranchNm.ZS(V(offc)))
+    next
+    PlaceOffs = OffList
+End function
+
+' ====================================================================
+' ПОДГОТОВКА СПИСКОВ РЕМОНТОВ
+' ====================================================================
+Call TopologyStore
+Dim RepairIndexes()
+Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
+Dim RepairComb: Set RepairComb = new Combinator
+Dim RepComb()
+
+Sub RefreshRepairIndexes()
+    spBranch.SetSel("Repair")
+    ReDim RepairIndexes(spBranch.Count)
+    cnt = 0
+    ndx = spBranch.FindNextSel(-1)
+    While ndx >= 0
+        RepairIndexes(cnt) = ndx
+        cnt = cnt + 1
+        ndx = spBranch.FindNextSel(ndx)
+    Wend
+    If cnt > 0 Then
+        ReDim Preserve RepairIndexes(cnt-1)
+    Else
+        ReDim RepairIndexes(-1)
+    End If
+    totalRepairs = cnt
+    If MaxRepair <= 0 Or MaxRepair > totalRepairs Then MaxRepair = totalRepairs
+    If MaxRepair_count < 0 Then MaxRepair_count = 0
+    If MaxRepair_count > MaxRepair Then MaxRepair_count = MaxRepair
+End Sub
+
+' ====================================================================
+' АНАЛИЗ ГЕНЕРАТОРОВ (Delta)
+' ====================================================================
+Sub RunGeneratorAnalysis(description)
+    wsResultGen.Cells(resultRowGen, 1).Value = description
+    wsResultGen.Cells(resultRowGen, 1).Font.Bold = True
+    resultRowGen = resultRowGen + 1
+
+    ' Заголовки
+    wsResultGen.Cells(resultRowGen, 1).Value = "Генератор"
+    wsResultGen.Cells(resultRowGen, 2).Value = "Max Delta"
+    wsResultGen.Cells(resultRowGen, 3).Value = "Min Delta"
+    wsResultGen.Cells(resultRowGen, 4).Value = "Время Max Delta"
+    wsResultGen.Cells(resultRowGen, 5).Value = "Нарушение устойчивости"
+    wsResultGen.Cells(resultRowGen, 6).Value = "Время нарушения"
+    wsResultGen.Range(wsResultGen.Cells(resultRowGen, 1), wsResultGen.Cells(resultRowGen, 6)).Font.Bold = True
+    resultRowGen = resultRowGen + 1
+
+    Dim blockStart: blockStart = resultRowGen
+    Dim dataCol: dataCol = 1
+
+    For Each genIdx In selectedGenIndices
+        genName = colGenName.ZS(genIdx)
+
+        Set Plot = Nothing
+        For snapIdx = 1005 To 0 Step -1
+            On Error Resume Next
+            tmpPlot = Rastr.GetChainedGraphSnapshot("Generator", "Delta", genIdx, snapIdx)
+            errNum = Err.Number
+            On Error GoTo 0
+            If errNum = 0 And IsArray(tmpPlot) Then
+                Plot = tmpPlot
+                Exit For
+            End If
+        Next
+
+        If IsArray(Plot) Then
+            npoints = UBound(Plot, 1) + 1
+            If npoints > 0 Then
+                deltaCol = dataCol
+                timeCol = dataCol + 1
+                checkCol = dataCol + 2
+
+                wsDataGen.Cells(1, deltaCol).Value = genName & " (Delta)"
+                wsDataGen.Cells(1, timeCol).Value = genName & " (Time)"
+                wsDataGen.Cells(1, checkCol).Value = genName & " (>360)"
+
+                wsDataGen.Cells(2, deltaCol).Resize(npoints, 2).Value = Plot
+                wsDataGen.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = "=IF(RC" & deltaCol & ">360,ROW(),999999)"
+
+                deltaRange = wsDataGen.Cells(2, deltaCol).Address(False, False, 1, True) & ":" & _
+                            wsDataGen.Cells(npoints + 1, deltaCol).Address(False, False, 1, True)
+                timeRange = wsDataGen.Cells(2, timeCol).Address(False, False, 1, True) & ":" & _
+                           wsDataGen.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
+                checkRange = wsDataGen.Cells(2, checkCol).Address(False, False, 1, True) & ":" & _
+                            wsDataGen.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
+
+                wsResultGen.Cells(resultRowGen, 1).Value = genName
+                wsResultGen.Cells(resultRowGen, 2).Formula = "=MAX(" & deltaRange & ")"
+                wsResultGen.Cells(resultRowGen, 3).Formula = "=MIN(" & deltaRange & ")"
+                wsResultGen.Cells(resultRowGen, 4).Formula = "=INDEX(" & timeRange & ",MATCH(MAX(" & deltaRange & ")," & deltaRange & ",0))"
+                wsResultGen.Cells(resultRowGen, 5).Formula = "=IF(MAX(" & deltaRange & ")>360,""нарушение устойчивости"",""нарушение устойчивости не выявлено"")"
+                wsResultGen.Cells(resultRowGen, 6).Formula = "=IF(AND(MAX(" & deltaRange & ")>360,MIN(" & checkRange & ")<999999),INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+
+                resultRowGen = resultRowGen + 1
+                dataCol = dataCol + 3
+            End If
+        End If
+    Next
+
+    Dim blockEnd: blockEnd = resultRowGen - 1
+    If blockEnd >= blockStart Then
+        xl.Calculate
+        wsResultGen.Range(wsResultGen.Cells(blockStart, 1), wsResultGen.Cells(blockEnd, 6)).Value = _
+            wsResultGen.Range(wsResultGen.Cells(blockStart, 1), wsResultGen.Cells(blockEnd, 6)).Value
+    End If
+End Sub
+
+' ====================================================================
+' АНАЛИЗ ЭЦК (КРИТИЧЕСКИЕ УГЛЫ dij)
+' ====================================================================
+Sub RunECKAnalysis(description)
+    wsResultECK.Cells(resultRowECK, 1).Value = description
+    wsResultECK.Cells(resultRowECK, 1).Font.Bold = True
+    resultRowECK = resultRowECK + 1
+
+    ' Заголовки
+    wsResultECK.Cells(resultRowECK, 1).Value = "Ветвь"
+    wsResultECK.Cells(resultRowECK, 2).Value = "N нач"
+    wsResultECK.Cells(resultRowECK, 3).Value = "N кон"
+    wsResultECK.Cells(resultRowECK, 4).Value = "Max dij"
+    wsResultECK.Cells(resultRowECK, 5).Value = "Время критического dij"
+    wsResultECK.Cells(resultRowECK, 6).Value = "Статус"
+    wsResultECK.Range(wsResultECK.Cells(resultRowECK, 1), wsResultECK.Cells(resultRowECK, 6)).Font.Bold = True
+    resultRowECK = resultRowECK + 1
+
+    Dim blockStart: blockStart = resultRowECK
+    Dim dataCol: dataCol = 1
+    Dim cachedSnapIdx: cachedSnapIdx = -1
+
+    For Each vetvIdx In selectedVetvIndices
+        Dim vetvName, nNACH, nKON
+        vetvName = spBranchNm.ZS(vetvIdx)
+        nNACH = spBranchIp.Z(vetvIdx)
+        nKON = spBranchIq.Z(vetvIdx)
+
+        Dim PlotDij: PlotDij = Empty
+        Dim foundData: foundData = False
+
+        If cachedSnapIdx >= 0 Then
+            On Error Resume Next
+            PlotDij = Rastr.GetChainedGraphSnapshot("vetv", "dij", vetvIdx, cachedSnapIdx)
+            If Err.Number = 0 And IsArray(PlotDij) Then
+                foundData = True
+            Else
+                cachedSnapIdx = -1
+            End If
+            Err.Clear
+            On Error GoTo 0
+        End If
+
+        If Not foundData Then
+            Dim snapIdx
+            For snapIdx = 1005 To 0 Step -1
+                On Error Resume Next
+                PlotDij = Rastr.GetChainedGraphSnapshot("vetv", "dij", vetvIdx, snapIdx)
+                If Err.Number = 0 And IsArray(PlotDij) Then
+                    cachedSnapIdx = snapIdx
+                    foundData = True
+                    Err.Clear
+                    Exit For
+                End If
+                Err.Clear
+                On Error GoTo 0
+            Next
+        End If
+
+        If foundData And IsArray(PlotDij) Then
+            Dim dijCol, timeCol, checkCol
+            dijCol = dataCol
+            timeCol = dataCol + 1
+            checkCol = dataCol + 2
+
+            wsDataECK.Cells(1, dijCol).Value = vetvName & " (dij)"
+            wsDataECK.Cells(1, timeCol).Value = vetvName & " (Time)"
+            wsDataECK.Cells(1, checkCol).Value = vetvName & " (>180)"
+
+            Dim npoints: npoints = 0
+            On Error Resume Next
+            Dim arrRows: arrRows = UBound(PlotDij, 1) - LBound(PlotDij, 1) + 1
+            If Err.Number = 0 Then
+                wsDataECK.Range(wsDataECK.Cells(2, dijCol), wsDataECK.Cells(arrRows + 1, timeCol)).Value = PlotDij
+                npoints = arrRows
+            End If
+            Err.Clear
+            On Error GoTo 0
+
+            If npoints > 0 Then
+                wsDataECK.Cells(2, checkCol).Resize(npoints, 1).FormulaR1C1 = _
+                    "=IF(ABS(RC" & dijCol & ")>180,ROW(),999999)"
+
+                Dim dijRange, timeRange, checkRange
+                dijRange = wsDataECK.Cells(2, dijCol).Address(False, False, 1, True) & ":" & _
+                          wsDataECK.Cells(npoints + 1, dijCol).Address(False, False, 1, True)
+                timeRange = wsDataECK.Cells(2, timeCol).Address(False, False, 1, True) & ":" & _
+                           wsDataECK.Cells(npoints + 1, timeCol).Address(False, False, 1, True)
+                checkRange = wsDataECK.Cells(2, checkCol).Address(False, False, 1, True) & ":" & _
+                            wsDataECK.Cells(npoints + 1, checkCol).Address(False, False, 1, True)
+
+                wsResultECK.Cells(resultRowECK, 1).Value = vetvName
+                wsResultECK.Cells(resultRowECK, 2).Value = nNACH
+                wsResultECK.Cells(resultRowECK, 3).Value = nKON
+                wsResultECK.Cells(resultRowECK, 4).Formula = _
+                    "=MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))"
+                wsResultECK.Cells(resultRowECK, 5).Formula = _
+                    "=IF(AND(MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))>180,MIN(" & checkRange & ")<999999)," & _
+                    "INDEX(" & timeRange & ",MATCH(MIN(" & checkRange & ")," & checkRange & ",0)),"""")"
+                wsResultECK.Cells(resultRowECK, 6).Formula = _
+                    "=IF(MAX(MAX(" & dijRange & "),-MIN(" & dijRange & "))>180," & _
+                    """КРИТИЧЕСКИЙ dij (ЭЦК)"",""Норма"")"
+
+                resultRowECK = resultRowECK + 1
+                dataCol = dataCol + 3
+            End If
+        End If
+    Next
+
+    Dim blockEnd: blockEnd = resultRowECK - 1
+    If blockEnd >= blockStart Then
+        xl.Calculate
+        wsResultECK.Range(wsResultECK.Cells(blockStart, 1), wsResultECK.Cells(blockEnd, 6)).Value = _
+            wsResultECK.Range(wsResultECK.Cells(blockStart, 1), wsResultECK.Cells(blockEnd, 6)).Value
+    End If
+
+    ' Подсветка критических
+    For r = blockStart To blockEnd
+        On Error Resume Next
+        If wsResultECK.Cells(r, 6).Value = "КРИТИЧЕСКИЙ dij (ЭЦК)" Then
+            wsResultECK.Range(wsResultECK.Cells(r, 1), wsResultECK.Cells(r, 6)).Interior.Color = RGB(255, 200, 200)
+            wsResultECK.Cells(r, 6).Font.Bold = True
+        End If
+        Err.Clear
+        On Error GoTo 0
+    Next
+End Sub
+
+' ====================================================================
+' ОБЪЕДИНЁННЫЙ ЗАПУСК: УР + ДИНАМИКА + ОБА АНАЛИЗА
+' ====================================================================
+Sub RunBothAnalyses(description)
+    urRes = SolveUR()
+    If urRes <> 0 Then
+        wsResultGen.Cells(resultRowGen, 1).Value = description & " — ошибка расчёта УР (код " & urRes & ")"
+        resultRowGen = resultRowGen + 1
+        wsResultECK.Cells(resultRowECK, 1).Value = description & " — ошибка расчёта УР (код " & urRes & ")"
+        resultRowECK = resultRowECK + 1
+        Exit Sub
+    End If
+
+    dynRes = spFWDynamic.Run()
+    If dynRes <> 0 Then
+        wsResultGen.Cells(resultRowGen, 1).Value = description & " — Код динамики " & dynRes
+        resultRowGen = resultRowGen + 1
+        wsResultECK.Cells(resultRowECK, 1).Value = description & " — Код динамики " & dynRes
+        resultRowECK = resultRowECK + 1
+        Exit Sub
+    End If
+
+    ' Успешный расчёт динамики - выполняем оба анализа
+    RunGeneratorAnalysis description
+    RunECKAnalysis description
+End Sub
+
+' ====================================================================
+' ОСНОВНОЙ ЦИКЛ
+' ====================================================================
+Dim scenarioList()
+ReDim scenarioList(-1)
+
+Sub CollectScenarioFiles(folderPath)
+    For Each f In fso.GetFolder(folderPath).Files
+        If LCase(Right(f.Name, 4)) = ".scn" And f.Path <> ScenarioTemplatePath Then
+            ReDim Preserve scenarioList(UBound(scenarioList) + 1)
+            scenarioList(UBound(scenarioList)) = f.Path
+        End If
+    Next
+    For Each subf In fso.GetFolder(folderPath).SubFolders
+        CollectScenarioFiles subf.Path
+    Next
+End Sub
+
+If fso.FolderExists(ScenarioFolderPath) Then
+    CollectScenarioFiles ScenarioFolderPath
+End If
+
+If TemplateFieldsAdded = 1 Then
+    MsgBox "Поля добавлены. Сохраните модель и запустите скрипт повторно.", vbInformation, "Подготовка"
     WScript.Quit
 End If
 
-' --- 4. ЦИКЛ ПО СЦЕНАРИЯМ [cite: 29-32] ---
-Dim scenarioList: scenarioList = Array()
-CollectScenarios ScenarioFolderPath, scenarioList
+If Not fso.FolderExists(ScenarioFolderPath) Then
+    MsgBox "Папка сценариев не найдена: " & ScenarioFolderPath, vbCritical, "Ошибка"
+    WScript.Quit
+End If
 
-Dim iScn, currentScn, RepairIndexes, totalRepairs, RepComb, hasNext, RepTitle
-Dim CombObj: Set CombObj = New Combinator
+If UBound(scenarioList) < 0 Then
+    MsgBox "Не найдено .scn файлов в папке: " & ScenarioFolderPath, vbExclamation, "Нет сценариев"
+    WScript.Quit
+End If
+
+' ====================================================================
+' ВЫБОР ГЕНЕРАТОРОВ (ОДИН РАЗ)
+' ====================================================================
+Set tblGen = Rastr.Tables("Generator")
+Set colGenName = tblGen.Cols("Name")
+On Error Resume Next
+Set colGenSel = tblGen.Cols("sel")
+If Err.Number <> 0 Then
+    tblGen.Cols.Add "sel", PR_BOOL
+    tblGen.Cols("sel").Prop(FL_ZAG) = "Выбор"
+    MsgBox "Добавлено поле sel для генераторов. Выберите генераторы и запустите скрипт повторно.", vbInformation
+    WScript.Quit
+End If
+On Error GoTo 0
+
+Dim selectedGenIndices()
+Dim genCount: genCount = 0
+tblGen.SetSel("sel")
+genIdx = tblGen.FindNextSel(-1)
+While genIdx >= 0
+    If genCount = 0 Then
+        ReDim selectedGenIndices(0)
+    Else
+        ReDim Preserve selectedGenIndices(UBound(selectedGenIndices) + 1)
+    End If
+    selectedGenIndices(UBound(selectedGenIndices)) = genIdx
+    genCount = genCount + 1
+    genIdx = tblGen.FindNextSel(genIdx)
+Wend
+
+If genCount = 0 Then
+    MsgBox "Не выбрано ни одного генератора!", vbExclamation, "Нет выбора"
+    WScript.Quit
+End If
+
+' ====================================================================
+' ВЫБОР ВЕТВЕЙ ДЛЯ ЭЦК (ОДИН РАЗ)
+' ====================================================================
+Dim selectedVetvIndices()
+Dim vetvCount: vetvCount = 0
+spBranch.SetSel("sel")
+vetvIdx = spBranch.FindNextSel(-1)
+While vetvIdx >= 0
+    If vetvCount = 0 Then
+        ReDim selectedVetvIndices(0)
+    Else
+        ReDim Preserve selectedVetvIndices(UBound(selectedVetvIndices) + 1)
+    End If
+    selectedVetvIndices(UBound(selectedVetvIndices)) = vetvIdx
+    vetvCount = vetvCount + 1
+    vetvIdx = spBranch.FindNextSel(vetvIdx)
+Wend
+
+If vetvCount = 0 Then
+    MsgBox "Не выбрано ни одной ветви для анализа ЭЦК!", vbExclamation, "Нет выбора"
+    WScript.Quit
+End If
+
+MsgBox "Выбрано генераторов: " & genCount & vbCrLf & _
+       "Выбрано ветвей (ЭЦК): " & vetvCount & vbCrLf & _
+       "Сценариев: " & (UBound(scenarioList) + 1), vbInformation, "Начало расчёта"
+
+' ====================================================================
+' ЦИКЛ ПО СЦЕНАРИЯМ
+' ====================================================================
+Dim scenarioCount: scenarioCount = 0
 
 For iScn = 0 To UBound(scenarioList)
-    currentScn = scenarioList(iScn)
-    Rastr.Load 1, currentScn, ScenarioTemplatePath
+    scnPath = scenarioList(iScn)
+    Rastr.Load 1, scnPath, ScenarioTemplatePath
     Set spFWDynamic = Rastr.FWDynamic
     
-    RefreshRepairIndexes RepairIndexes, totalRepairs [cite: 16]
-    TopologyStore [cite: 11]
-    
-    ' А) НОРМАЛЬНАЯ СХЕМА [cite: 43]
-    RunFullAnalysis "Сценарий: " & fso.GetFileName(currentScn) & " (Норма)"
-    TopologyRestore [cite: 11]
-    
-    ' Б) ПЕРЕБОР РЕМОНТОВ [cite: 44-48]
-    If totalRepairs > 0 Then
-        Dim limit: limit = MaxRepair: If limit > totalRepairs Then limit = totalRepairs
-        For RepOff = MaxRepair_count To limit
-            If CombObj.Init(RepairIndexes, RepOff, totalRepairs) Then
-                If CombObj.FirstCombination(RepComb) Then
+    If Not spFWDynamic Is Nothing Then
+        TopologyStore
+        RefreshRepairIndexes
+        scenarioCount = scenarioCount + 1
+
+        wsDataGen.Cells.Clear
+        wsDataECK.Cells.Clear
+
+        ' Заголовок сценария
+        wsResultGen.Cells(resultRowGen, 1).Value = "Сценарий " & scenarioCount & ": " & scnPath
+        wsResultGen.Cells(resultRowGen, 1).Font.Bold = True
+        resultRowGen = resultRowGen + 1
+
+        wsResultECK.Cells(resultRowECK, 1).Value = "Сценарий " & scenarioCount & ": " & scnPath
+        wsResultECK.Cells(resultRowECK, 1).Font.Bold = True
+        resultRowECK = resultRowECK + 1
+
+        ' Базовый расчёт
+        RunBothAnalyses "УР: Нормальная схема"
+        TopologyRestore
+
+        ' Перебор комбинаций ремонтов
+        totalRepairs = UBound(RepairIndexes) + 1
+        If MaxRepair > totalRepairs Then MaxRepair = totalRepairs
+
+        If totalRepairs > 0 Then
+            For RepOff = MaxRepair_count To MaxRepair
+                RepairComb.Init RepairIndexes, RepOff, totalRepairs
+                If RepairComb.FirstCombination(RepComb) Then
                     Do
-                        RepTitle = PlaceOffs(RepComb, RepOff) [cite: 14]
-                        RunFullAnalysis "Сценарий: " & fso.GetFileName(currentScn) & " | Ремонт: " & RepTitle
+                        RepTitle = PlaceOffs(RepComb, RepOff)
+                        RunBothAnalyses "УР: Ремонт ВЛ - " & RepTitle
                         TopologyRestore
-                        hasNext = CombObj.NextCombination(RepComb)
+                        hasNext = RepairComb.NextCombination(RepComb)
                     Loop While hasNext
                 End If
-            End If
-        Next
+            Next
+        End If
     End If
 Next
 
-' --- 5. ФИНАЛЬНОЕ ОФОРМЛЕНИЕ И ПОДСВЕТКА [cite: 88] ---
-FormatAndHighlight
-MsgBox "Анализ завершен полностью!", vbInformation
+' ====================================================================
+' ФИНАЛИЗАЦИЯ
+' ====================================================================
+wsDataGen.Columns.AutoFit
+wsDataECK.Columns.AutoFit
+wsResultGen.Columns.AutoFit
+wsResultECK.Columns.AutoFit
 
-' ==============================================================================
-' ГЛАВНАЯ ФУНКЦИЯ АНАЛИЗА
-' ==============================================================================
-Sub RunFullAnalysis(desc)
-    If Rastr.rgm("p") <> 0 Then
-        wsGenRes.Cells(rG, 1).Value = desc & " (Ошибка УР)": rG = rG + 1: Exit Sub
-    End If
-    If spFWDynamic.Run() <> 0 Then
-        wsGenRes.Cells(rG, 1).Value = desc & " (Ошибка Динамики)": rG = rG + 1: Exit Sub
-    End If
+xl.ScreenUpdating = True
 
-    ' Анализ генераторов (Delta) [cite: 17]
-    If UBound(selGen) >= 0 Then
-        wsGenRes.Cells(rG, 1).Value = desc: wsGenRes.Cells(rG, 1).Font.Bold = True: rG = rG + 1
-        wsGenRes.Range(wsGenRes.Cells(rG, 1), wsGenRes.Cells(rG, 6)).Value = Array("Генератор", "Max Delta", "Min Delta", "Время Max", "Статус", "Время нарушения")
-        wsGenRes.Range(wsGenRes.Cells(rG, 1), wsGenRes.Cells(rG, 6)).Font.Bold = True: rG = rG + 1
-        Dim gIdx: For Each gIdx In selGen
-            ProcessObject tblGen, "Delta", gIdx, wsGenRes, wsData1, rG, cG, True
-        Next
-        rG = rG + 1
-    End If
+MsgBox "Обработка завершена!" & vbCrLf & _
+       "Сценариев обработано: " & scenarioCount & vbCrLf & _
+       "Генераторов проанализировано: " & genCount & vbCrLf & _
+       "Ветвей ЭЦК проанализировано: " & vetvCount, vbInformation, "Готово"
 
-    ' Анализ ветвей (dij) [cite: 50]
-    If UBound(selBr) >= 0 Then
-        wsDijRes.Cells(rD, 1).Value = desc: wsDijRes.Cells(rD, 1).Font.Bold = True: rD = rD + 1
-        wsDijRes.Range(wsDijRes.Cells(rD, 1), wsDijRes.Cells(rD, 6)).Value = Array("Ветвь", "N нач", "N кон", "Max |dij|", "Время ЭЦК", "Статус")
-        wsDijRes.Range(wsDijRes.Cells(rD, 1), wsDijRes.Cells(rD, 6)).Font.Bold = True: rD = rD + 1
-        Dim bIdx: For Each bIdx In selBr
-            ProcessObject spBranch, "dij", bIdx, wsDijRes, wsData2, rD, cD, False
-        Next
-        rD = rD + 1
-    End If
-End Sub
-
-' ==============================================================================
-' ОБРАБОТКА ДАННЫХ И ФОРМУЛЫ EXCEL
-' ==============================================================================
-Sub ProcessObject(table, col, idx, wsRes, wsData, ByRef row, ByRef colData, isGen)
-    Dim Plot: Plot = GetSnapshot(table.Name, col, idx) [cite: 19, 56]
-    Dim objName: objName = table.Cols("name").ZS(idx)
-    
-    If IsArray(Plot) Then
-        Dim nP: nP = WriteArrayToExcel(Plot, wsData, colData, objName) [cite: 63-78]
-        
-        ' Вспомогательная колонка для поиска времени нарушения/ЭЦК 
-        Dim limitValue: If isGen Then limitValue = 360 Else limitValue = 180
-        wsData.Cells(2, colData + 2).Resize(nP, 1).FormulaR1C1 = "=IF(ABS(RC[-1])>" & limitValue & ",ROW(),999999)"
-        
-        Dim tR: tR = wsData.Name & "!R2C" & colData & ":R" & (nP + 1) & "C" & colData
-        Dim vR: vR = wsData.Name & "!R2C" & (colData + 1) & ":R" & (nP + 1) & "C" & (colData + 1)
-        Dim cR: cR = wsData.Name & "!R2C" & (colData + 2) & ":R" & (nP + 1) & "C" & (colData + 2)
-
-        wsRes.Cells(row, 1).Value = objName
-        If isGen Then
-            wsRes.Cells(row, 2).FormulaR1C1 = "=MAX(" & vR & ")" [cite: 25]
-            wsRes.Cells(row, 3).FormulaR1C1 = "=MIN(" & vR & ")"
-            wsRes.Cells(row, 4).FormulaR1C1 = "=INDEX(" & tR & ",MATCH(RC[-2]," & vR & ",0))"
-            wsRes.Cells(row, 5).FormulaR1C1 = "=IF(RC[-3]>360,""нарушение устойчивости"",""норма"")"
-            wsRes.Cells(row, 6).FormulaR1C1 = "=IF(AND(RC[-4]>360,MIN(" & cR & ")<999999),INDEX(" & tR & ",MATCH(MIN(" & cR & ")," & cR & ",0)-1),"""")"
-        Else
-            wsRes.Cells(row, 2).Value = table.Cols("ip").Z(idx)
-            wsRes.Cells(row, 3).Value = table.Cols("iq").Z(idx)
-            wsRes.Cells(row, 4).FormulaR1C1 = "=MAX(MAX(" & vR & "),-MIN(" & vR & "))" [cite: 82]
-            wsRes.Cells(row, 5).FormulaR1C1 = "=IF(AND(RC[-1]>180,MIN(" & cR & ")<999999),INDEX(" & tR & ",MATCH(MIN(" & cR & ")," & cR & ",0)-1),"""")"
-            wsRes.Cells(row, 6).FormulaR1C1 = "=IF(RC[-2]>180,""КРИТИЧЕСКИЙ dij (ЭЦК)"",""Норма"")" [cite: 84]
-        End If
-        row = row + 1: colData = colData + 3
-    End If
-End Sub
-
-' --- ТЕХНИЧЕСКИЙ БЛОК: ЗАПИСЬ МАССИВОВ  ---
-Function WriteArrayToExcel(arr, ws, col, name)
-    On Error Resume Next
-    Dim rCount, cCount, is2D, i, j, outRow: outRow = 2
-    rCount = UBound(arr, 1) - LBound(arr, 1) + 1
-    cCount = UBound(arr, 2) - LBound(arr, 2) + 1
-    is2D = (Err.Number = 0): Err.Clear
-    
-    ws.Cells(1, col).Value = name & " (T)": ws.Cells(1, col + 1).Value = name & " (Val)"
-    
-    If is2D And cCount >= 2 Then
-        ws.Cells(2, col).Resize(rCount, 2).Value = arr
-    Else
-        ' Поэлементная запись для сложных случаев [cite: 75-78]
-        For i = LBound(arr) To UBound(arr) Step 2
-            ws.Cells(outRow, col).Value = arr(i)
-            If i + 1 <= UBound(arr) Then ws.Cells(outRow, col + 1).Value = arr(i + 1)
-            outRow = outRow + 1
-        Next
-        rCount = outRow - 2
-    End If
-    WriteArrayToExcel = rCount
-End Function
-
-Function GetSnapshot(tbl, col, idx)
-    Dim s, p: For s = 1005 To 0 Step -1
-        On Error Resume Next
-        p = Rastr.GetChainedGraphSnapshot(tbl, col, idx, s)
-        If Err.Number = 0 And IsArray(p) Then GetSnapshot = p: Exit Function
-        Err.Clear: On Error GoTo 0
-    Next
-End Function
-
-' --- ВСПОМОГАТЕЛЬНЫЕ ПРОЦЕДУРЫ ---
-Sub PrepareFields(): On Error Resume Next
-    If spBranch.Cols.Find("Repair") < 0 Then spBranch.Cols.Add "Repair", 3
-    If spBranch.Cols.Find("sel") < 0 Then spBranch.Cols.Add "sel", 3
-    If tblGen.Cols.Find("sel") < 0 Then tblGen.Cols.Add "sel", 3
-End Sub: On Error GoTo 0
-
-Function GetSelectedIndices(tbl)
-    Dim a(), c: c = 0: ReDim a(-1): Dim i: i = tbl.FindNextSel(-1)
-    Do While i >= 0: ReDim Preserve a(c): a(c) = i: c = c + 1: i = tbl.FindNextSel(i): Loop
-    GetSelectedIndices = a
-End Function
-
-Sub TopologyStore(): spNode.Cols.Add "staRes", 3: spBranch.Cols.Add "staRes", 3: spNode.Cols("staRes").Calc "sta": spBranch.Cols("staRes").Calc "sta": End Sub
-Sub TopologyRestore(): spNode.Cols("sta").Calc "staRes": spBranch.Cols("sta").Calc "staRes": End Sub
-Sub RefreshRepairIndexes(ByRef arr, ByRef n): arr = Array(): n = 0: Dim i: For i = 0 To spBranch.Size - 1: If spBranch.Cols("Repair").Z(i) <> 0 Then: ReDim Preserve arr(n): arr(n) = i: n = n + 1: End If: Next: End Sub
-Function PlaceOffs(ByRef V, k): Dim i, s: s = "": For i = 0 To k-1: spBranch.Cols("sta").Z(V(i)) = 1: s = s & spBranch.Cols("name").ZS(V(i)) & "; ": Next: PlaceOffs = s: End Function
-Sub CollectScenarios(p, ByRef l): Dim f: For Each f In fso.GetFolder(p).Files: If LCase(fso.GetExtensionName(f.Name))="scn" Then: ReDim Preserve l(UBound(l)+1): l(UBound(l))=f.Path: End If: Next: End Sub
-
-Sub FormatAndHighlight()
-    Dim r: xl.Calculate
-    For r = 1 To rG: If wsGenRes.Cells(r, 5).Value = "нарушение устойчивости" Then wsGenRes.Rows(r).Interior.Color = RGB(255, 180, 180)
-    Next
-    For r = 1 To rD: If wsDijRes.Cells(r, 6).Value = "КРИТИЧЕСКИЙ dij (ЭЦК)" Then wsDijRes.Rows(r).Interior.Color = RGB(255, 200, 200)
-    Next
-    wsGenRes.Columns.AutoFit: wsDijRes.Columns.AutoFit: wsData1.Columns.AutoFit: wsData2.Columns.AutoFit
-End Sub
-
-Class Combinator
-    Dim C(), V_ref(), m, n
-    Public Function Init(Vs, k, t): m = k: n = t: V_ref = Vs: If m > n Then Init = False: Exit Function
-    ReDim C(m-1): Dim i: For i = 0 To m-1: C(i) = i: Next: Init = True: End Function
-    Public Function FirstCombination(ByRef Vo): ReDim Vo(m-1): Dim i: For i = 0 To m-1: Vo(i) = V_ref(C(i)): Next: FirstCombination = True: End Function
-    Public Function NextCombination(ByRef Vo): Dim i, j, f: f = False: For i = m-1 To 0 Step -1: If C(i) < n-m+i Then: C(i)=C(i)+1: For j=i+1 To m-1: C(j)=C(j-1)+1: Next: f=True: Exit For: End If: Next
-    If f Then FirstCombination Vo
-    NextCombination = f: End Function
-End Class
+On Error Resume Next
+xl.DisplayAlerts = True
+On Error GoTo 0
